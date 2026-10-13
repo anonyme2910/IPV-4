@@ -86,6 +86,22 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-player{font-size:.78rem;font-weight:700;background:rgba(255,255,255,.05);border-radius:8px;padding:.4rem .7rem;color:#cfe3f5}
 .mp-err{font-size:.72rem;font-weight:700;color:#ff8a8a;min-height:1em}
 .mp-row{display:flex;gap:.6rem}.mp-row>*{flex:1}
+
+/* ───────── MODE SURVEILLÉ / RÉSULTATS ───────── */
+.mp-box.wide{max-width:660px}
+#mp-res{position:fixed;inset:0;z-index:61;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(3,6,14,.78)}
+#mp-res.show{display:flex}
+#mp-resbtn{position:fixed;left:4px;bottom:12px;z-index:55;width:38px;height:38px;border-radius:50%;border:1px solid #6b4a00;background:#0a0f1e;color:#ffb020;font-size:1.1rem;cursor:pointer;display:none;align-items:center;justify-content:center}
+#mp-resbtn:hover{background:#16224a}
+#mp-badge{position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:55;display:none;background:rgba(10,15,30,.92);border:1px solid #6b4a00;color:#ffb020;font:700 .68rem 'JetBrains Mono',monospace;padding:.35rem .8rem;border-radius:999px;pointer-events:none;white-space:nowrap}
+#mp-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;display:none;max-width:90%;background:#3a1010;border:1px solid #ff8a8a;color:#ffd0d0;font:700 .75rem 'JetBrains Mono',monospace;padding:.7rem 1rem;border-radius:12px;text-align:center}
+.mp-tbl-wrap{overflow-x:auto}
+.mp-tbl{width:100%;border-collapse:collapse;font-size:.7rem;color:#cfe3f5}
+.mp-tbl th{text-align:left;color:#8aabcc;font-weight:700;padding:.4rem .5rem;border-bottom:1px solid #243050;white-space:nowrap}
+.mp-tbl td{padding:.45rem .5rem;border-bottom:1px solid #131c36;white-space:nowrap}
+.mp-tbl td.bad{color:#ff8a8a;font-weight:700}
+.mp-chk{display:flex;gap:.6rem;align-items:flex-start;font-size:.72rem;color:#cfe3f5;line-height:1.5;cursor:pointer}
+.mp-chk span{color:#8aabcc}
 </style>
 </head>
 <body>
@@ -126,6 +142,10 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 
 <!-- MULTIJOUEUR -->
 <div id="mp-modal"><div class="mp-box" id="mp-box"></div></div>
+<div id="mp-res"><div class="mp-box wide" id="mp-resbox"></div></div>
+<button id="mp-resbtn" title="Résultats des joueurs" onclick="mpResOpen()">📊</button>
+<div id="mp-badge"></div>
+<div id="mp-toast"></div>
 
 <!-- COURS -->
 <div class="page" id="page-cours">
@@ -151,22 +171,41 @@ const MP_OPTS={debug:0,config:{iceServers:[
   {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ]}};
-let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[]};
+let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,fin:false,finSent:false,lastSig:'',lastSend:0};
 
 function mpBox(h){document.getElementById('mp-box').innerHTML=h;}
 function mpEsc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function mpNorm(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,20);}
 function mpGenCode(){let c='';for(let i=0;i<5;i++)c+=MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];return c;}
 function mpClean(){
+  try{clearInterval(mp.tick);}catch(e){}
   try{mp.conns.forEach(c=>c.close());}catch(e){}
   try{if(mp.hostConn)mp.hostConn.close();}catch(e){}
   try{if(mp.peer)mp.peer.destroy();}catch(e){}
-  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[]};
+  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,fin:false,finSent:false,lastSig:'',lastSend:0};
+  mpUi();
 }
 function mpOpen(){
-  mpClean();
   document.getElementById('mp-modal').classList.add('show');
+  if(mp.started){mpRunning();return;}
+  mpClean();
   mpMenu();
+}
+function mpHide(){document.getElementById('mp-modal').classList.remove('show');}
+function mpRunning(){
+  if(mp.role==='host'){
+    mpBox(`<div class="mp-title">🎮 Partie ${mp.code}</div>
+      <div class="mp-txt">Partie en cours — ${mp.conns.length} joueur(s) connecté(s). Mode surveillé : <b>${mp.exam?'activé':'désactivé'}</b>.</div>
+      <button class="mp-btn main" onclick="mpHide();mpResOpen()">📊 Voir les résultats</button>
+      <button class="mp-btn" onclick="mpClose()">⛔ Terminer la partie (déconnecte tout le monde)</button>
+      <button class="mp-btn" onclick="mpHide()">Fermer</button>`);
+  }else{
+    const locked=mpLocked();
+    mpBox(`<div class="mp-title">🎮 Partie ${mp.code}</div>
+      <div class="mp-txt">${locked?'🔒 Mode surveillé : tu ne peux pas quitter la partie avant d\'avoir terminé le Quiz.':'Tu es connecté à la partie.'}</div>
+      ${locked?'':'<button class="mp-btn" onclick="mpClose()">Quitter la partie</button>'}
+      <button class="mp-btn" onclick="mpHide()">Fermer</button>`);
+  }
 }
 function mpClose(){mpClean();document.getElementById('mp-modal').classList.remove('show');}
 function mpMenu(err){
@@ -194,6 +233,104 @@ function mpGetName(){
 }
 function mpErr(t){const e=document.getElementById('mp-err');if(e)e.textContent=t;}
 
+
+/* ───────── MODE SURVEILLÉ + RÉSULTATS ───────── */
+const MP_Q=`(function(){
+ if(typeof diff==='undefined')return null;
+ if(!diff)return{state:'menu'};
+ const done=won||finished;
+ const baseline=Math.round(20/diff.gain);
+ const extra=Math.max(0,coups-baseline);
+ const penalty=diff.noteLoss*Math.floor(extra/diff.notePer);
+ const reached=score>=20;
+ const note=reached?Math.max(0,20-penalty):fmt(Math.round(score*2)/2);
+ return{state:done?'done':'run',level:diff.label,score:score,coups:coups,note:done?note:null,time:getElapsed()};
+})()`;
+const MP_LBL={salon:'Au salon',menu:'Choix du niveau',run:'En cours',done:'Terminé'};
+function mpFmt(ms){const s=Math.floor((ms||0)/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function mpRead(){try{return document.getElementById('f-quiz').contentWindow.eval(MP_Q);}catch(e){return null;}}
+function mpToast(t){const e=document.getElementById('mp-toast');if(!e)return;e.textContent=t;e.style.display='block';clearTimeout(mpToast._t);mpToast._t=setTimeout(()=>{e.style.display='none';},3500);}
+function mpLocked(){
+  if(mp.role==='guest'&&mp.started&&mp.exam&&!mp.fin){const r=mpRead();if(r&&r.state==='done'){mpTick(true);}}
+  return mp.role==='guest'&&mp.started&&mp.exam&&!mp.fin;
+}
+function mpUi(){
+  const rb=document.getElementById('mp-resbtn');
+  if(rb)rb.style.display=(mp.role==='host'&&mp.started)?'flex':'none';
+  const b=document.getElementById('mp-badge');
+  if(b){
+    const on=mp.role==='guest'&&mp.started&&mp.exam;
+    b.style.display=on?'block':'none';
+    if(on)b.textContent=mp.fin?'✅ Terminé — résultat envoyé au créateur':'🔒 Mode surveillé · sorties de page : '+mp.exits;
+  }
+}
+
+/* invité */
+function mpGuestStart(exam){
+  if(mp.started)return;
+  mp.exam=exam;mp.started=true;mp.exits=0;mp.away=0;mp.hiddenAt=0;mp.fin=false;mp.finSent=false;mp.lastSig='';
+  document.getElementById('mp-modal').classList.remove('show');
+  openPage('quiz');
+  clearInterval(mp.tick);
+  mp.tick=setInterval(()=>mpTick(false),1500);
+  mpTick(true);mpUi();
+}
+function mpTick(force){
+  if(mp.role!=='guest'||!mp.started||!mp.hostConn||!mp.hostConn.open)return;
+  if(mp.fin&&mp.finSent){mpUi();return;}
+  const r=mpRead()||{state:'menu'};
+  if(r.state==='done'&&!mp.fin){mp.fin=true;force=true;}
+  const away=mp.away+(mp.hiddenAt?Date.now()-mp.hiddenAt:0);
+  const st={t:'status',state:r.state,level:r.level||'-',score:r.score||0,coups:r.coups||0,note:r.note==null?null:r.note,time:r.time||0,exits:mp.exits,away:away};
+  const sig=[st.state,st.level,st.score,st.coups,st.note,st.exits,Math.floor(away/2000)].join('|');
+  const now=Date.now();
+  if(force||sig!==mp.lastSig||now-mp.lastSend>5000){
+    mp.lastSig=sig;mp.lastSend=now;
+    try{mp.hostConn.send(st);if(mp.fin)mp.finSent=true;}catch(e){}
+  }
+  mpUi();
+}
+document.addEventListener('visibilitychange',()=>{
+  if(mp.role!=='guest'||!mp.started||!mp.exam||mp.fin)return;
+  if(document.hidden){mp.exits++;mp.hiddenAt=Date.now();mpTick(true);}
+  else if(mp.hiddenAt){mp.away+=Date.now()-mp.hiddenAt;mp.hiddenAt=0;mpTick(true);}
+});
+window.addEventListener('beforeunload',e=>{if(mpLocked()){e.preventDefault();e.returnValue='';}});
+
+/* créateur */
+function mpEntry(conn){
+  return mp.results[conn.peer]||(mp.results[conn.peer]={name:conn._name||'Joueur',state:'salon',level:'-',score:0,coups:0,note:null,time:0,exits:0,away:0,disc:false});
+}
+function mpResOpen(){document.getElementById('mp-res').classList.add('show');mpRenderRes();}
+function mpResClose(){document.getElementById('mp-res').classList.remove('show');}
+function mpResRows(){
+  return Object.values(mp.results).map(e=>{
+    const started=(e.state==='run'||e.state==='done');
+    return {
+      name:e.name,level:e.level||'-',
+      state:(MP_LBL[e.state]||e.state)+(e.disc?' ⚠ déconnecté':''),
+      note:e.note==null?'—':e.note+' / 20',
+      time:started?mpFmt(e.time):'—',
+      exits:mp.exam?(e.exits+(e.away?' ('+mpFmt(e.away)+' hors page)':'')):'—',
+      bad:mp.exam&&e.exits>0
+    };
+  });
+}
+function mpRenderRes(){
+  const m=document.getElementById('mp-res');
+  if(!m||!m.classList.contains('show'))return;
+  const rows=mpResRows();
+  const body=rows.length?rows.map(r=>`<tr><td>${mpEsc(r.name)}</td><td>${mpEsc(r.level)}</td><td>${mpEsc(r.state)}</td><td>${mpEsc(r.note)}</td><td>${r.time}</td><td class="${r.bad?'bad':''}">${mpEsc(r.exits)}</td></tr>`).join(''):'<tr><td colspan="6">Aucun joueur pour le moment.</td></tr>';
+  document.getElementById('mp-resbox').innerHTML=`<div class="mp-title">📊 Résultats — partie ${mp.code}</div>
+    <div class="mp-txt">Mode surveillé : <b>${mp.exam?'activé':'désactivé'}</b> · mise à jour en direct</div>
+    <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr><th>Joueur</th><th>Niveau</th><th>État</th><th>Note</th><th>Temps</th><th>Sorties de page</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="mp-row"><button class="mp-btn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn main" onclick="mpResClose()">Fermer</button></div>`;
+}
+function mpResCopy(){
+  const t=mpResRows().map(r=>r.name+' | niveau : '+r.level+' | '+r.state+' | note : '+r.note+' | temps : '+r.time+' | sorties : '+r.exits).join('\n');
+  try{navigator.clipboard.writeText(t);mpToast('Résultats copiés ✓');}catch(e){}
+}
+
 /* ----- CRÉER ----- */
 function mpCreate(tries){
   if(typeof Peer==='undefined'){mpErr("Connexion impossible : vérifie ta connexion internet.");return;}
@@ -219,13 +356,24 @@ function mpCreate(tries){
   });
   peer.on('connection',conn=>{
     conn.on('data',d=>{
-      if(d&&d.t==='hello'){
+      if(!d)return;
+      if(d.t==='hello'){
         conn._name=String(d.name||'Joueur').slice(0,16);
         if(mp.conns.indexOf(conn)<0)mp.conns.push(conn);
-        mpBroadcastPlayers();
+        const e=mpEntry(conn);e.name=conn._name;e.disc=false;
+        if(mp.started){try{conn.send({t:'start',exam:!!mp.exam});}catch(x){}}
+        mpBroadcastPlayers();mpRenderRes();
+      }else if(d.t==='status'){
+        const e=mpEntry(conn);
+        Object.assign(e,{state:d.state,level:d.level,score:d.score,coups:d.coups,note:d.note,time:d.time,exits:d.exits,away:d.away});
+        mpRenderRes();
       }
     });
-    conn.on('close',()=>{mp.conns=mp.conns.filter(c=>c!==conn);mpBroadcastPlayers();});
+    conn.on('close',()=>{
+      mp.conns=mp.conns.filter(c=>c!==conn);
+      if(mp.results[conn.peer])mp.results[conn.peer].disc=true;
+      mpBroadcastPlayers();mpRenderRes();
+    });
   });
 }
 function mpBroadcastPlayers(){
@@ -234,19 +382,22 @@ function mpBroadcastPlayers(){
   mpHostLobby();
 }
 function mpHostLobby(){
-  if(mp.role!=='host')return;
+  if(mp.role!=='host'||mp.started)return;
   mpBox(`<div class="mp-title">🎮 Ta partie</div>
     <div class="mp-txt">Donne ce code à tes amis (clique dessus pour le copier) :</div>
     <div class="mp-code" onclick="mpCopy()" id="mp-code">${mp.code}</div>
     <div class="mp-txt">Joueurs connectés (${mp.players.length}) :</div>
     <div class="mp-players">${mp.players.map((n,i)=>`<div class="mp-player">${i===0?'👑 ':'🧑 '}${mpEsc(n)}</div>`).join('')}</div>
+    <label class="mp-chk"><input type="checkbox" ${mp.exam?'checked':''} onchange="mp.exam=this.checked"><div>🔒 Mode surveillé <span>— les joueurs ne peuvent pas quitter le Quiz avant d'avoir fini, et chaque sortie de la page est comptée.</span></div></label>
     <button class="mp-btn main" onclick="mpStart()">▶ Lancer le Quiz pour tout le monde</button>
     <button class="mp-btn" onclick="mpClose()">Annuler la partie</button>`);
 }
 function mpCopy(){try{navigator.clipboard.writeText(mp.code);const e=document.getElementById('mp-code');if(e){e.textContent='Copié ✓';setTimeout(()=>{if(document.getElementById('mp-code'))e.textContent=mp.code;},900);}}catch(e){}}
 function mpStart(){
-  mp.conns.forEach(c=>{try{c.send({t:'start'});}catch(e){}});
+  mp.started=true;
+  mp.conns.forEach(c=>{mpEntry(c).state='menu';try{c.send({t:'start',exam:!!mp.exam});}catch(e){}});
   document.getElementById('mp-modal').classList.remove('show');
+  mpUi();
   openPage('quiz');
 }
 
@@ -285,10 +436,13 @@ function mpJoin(){
     conn.on('data',d=>{
       if(!d)return;
       if(d.t==='players'){mp.players=d.list||[];mpGuestLobby();}
-      else if(d.t==='start'){document.getElementById('mp-modal').classList.remove('show');openPage('quiz');}
+      else if(d.t==='start'){mpGuestStart(!!d.exam);}
     });
     conn.on('close',()=>{
-      if(document.getElementById('mp-modal').classList.contains('show')){const n=mp.name;mpClean();mp.name=n;mpMenu('La partie a été fermée par le créateur.');}
+      if(mp.hostConn!==conn)return;
+      const n=mp.name;mpClean();mp.name=n;
+      if(document.getElementById('mp-modal').classList.contains('show'))mpMenu('La partie a été fermée par le créateur.');
+      else mpToast('La partie a été fermée par le créateur.');
     });
   });
 }
@@ -556,6 +710,7 @@ function setCoursLabel(t){
 }
 /* Retour du QUIZ : d'abord au choix du niveau, puis à l'accueil */
 function backQuiz(){
+  if(typeof mpLocked==='function'&&mpLocked()){mpToast('🔒 Mode surveillé : tu ne peux pas quitter le Quiz avant de l\'avoir terminé.');return;}
   let handled = false;
   try{
     const w = document.getElementById('f-quiz').contentWindow;
