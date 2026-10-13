@@ -107,6 +107,19 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-cell{display:inline-block;font-weight:700;border-radius:8px;padding:.35rem .6rem;text-align:left}
 .mp-sub{display:block;font-size:.62rem;font-weight:600;opacity:.92;margin-top:.15rem}
 .mp-cell small{opacity:.8;font-weight:600;margin-left:.3rem}
+
+#mp-res.full{padding:0;background:#050810}
+#mp-res.full .mp-box{max-width:none;width:100%;height:100%;border-radius:0;border:0;box-shadow:none;overflow:auto;padding:1.2rem 1.8rem}
+#mp-res.full .mp-tbl-wrap{flex:1}
+#mp-res.full .mp-title{font-size:1.9rem}
+#mp-res.full .mp-txt{font-size:.85rem}
+#mp-res.full .mp-tbl{font-size:1rem}
+#mp-res.full .mp-tbl th{padding:.8rem .9rem;font-size:.85rem}
+#mp-res.full .mp-tbl td{padding:.75rem .9rem}
+#mp-res.full .mp-cell{font-size:1.05rem;padding:.5rem 1rem}
+.mp-head{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap}
+.mp-tools{display:flex;gap:.5rem;flex-wrap:wrap}
+.mp-tools .mp-btn{padding:.55rem .9rem;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -377,8 +390,31 @@ window.addEventListener('beforeunload',e=>{if(mpLocked()){e.preventDefault();e.r
 function mpEntry(conn){
   return mp.results[conn.peer]||(mp.results[conn.peer]={name:conn._name||'Joueur',pi:Object.keys(mp.results).length,state:'salon',level:'-',score:0,coups:0,note:null,time:0,exits:0,away:0,levels:{},disc:false});
 }
-function mpResOpen(){document.getElementById('mp-res').classList.add('show');mpRenderRes();}
-function mpResClose(){document.getElementById('mp-res').classList.remove('show');}
+let mpResFull=true;
+function mpResFs(on){
+  const m=document.getElementById('mp-res');
+  try{
+    if(on){if(!document.fullscreenElement&&m.requestFullscreen){const r=m.requestFullscreen();if(r&&r.catch)r.catch(()=>{});}}
+    else if(document.fullscreenElement&&document.exitFullscreen){const r=document.exitFullscreen();if(r&&r.catch)r.catch(()=>{});}
+  }catch(e){}
+}
+function mpResOpen(){
+  mpResFull=true;
+  const m=document.getElementById('mp-res');
+  m.classList.add('show','full');
+  mpRenderRes();
+  mpResFs(true);
+}
+function mpResClose(){
+  mpResFs(false);
+  document.getElementById('mp-res').classList.remove('show','full');
+}
+function mpResToggle(){
+  mpResFull=!mpResFull;
+  document.getElementById('mp-res').classList.toggle('full',mpResFull);
+  mpResFs(mpResFull);
+  mpRenderRes();
+}
 function mpResRows(){
   return Object.values(mp.results).map(e=>{
     const lv=e.levels||{};
@@ -420,14 +456,14 @@ function mpRenderRes(){
     return r1+(ex?r2:'');
   }).join(''):'<tr><td colspan="10">Aucun joueur pour le moment.</td></tr>';
   const head='<th>Joueur</th><th>État</th>'+MP_LEVELS.map(l=>'<th>'+l+' – note /20</th><th>'+l+' – temps</th>').join('')+'<th>Total sorties de page</th><th>Total temps hors page</th>';
-  document.getElementById('mp-resbox').innerHTML=`<div class="mp-title">📊 Résultats — partie ${mp.code}</div>
+  document.getElementById('mp-resbox').innerHTML=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}</div>
+    <div class="mp-tools"><button class="mp-btn" onclick="mpResToggle()">${mpResFull?'⤡ Réduire':'⤢ Plein écran'}</button><button class="mp-btn" id="mp-copybtn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn" onclick="mpResDownload()">⬇ Excel (.xlsx)</button><button class="mp-btn main" onclick="mpResClose()">✕ Fermer</button></div></div>
     <div class="mp-txt">Mode surveillé : <b>${ex?'activé':'désactivé'}</b> · mise à jour en direct · une couleur par joueur · sous chaque note : nombre de sorties de page et temps hors page.</div>
-    <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
-    <div class="mp-row"><button class="mp-btn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn" onclick="mpResDownload()">⬇ Excel (.xlsx)</button><button class="mp-btn main" onclick="mpResClose()">Fermer</button></div>`;
+    <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function mpResCopy(){
   const t=mpResRows().map(r=>r.name+' | '+r.state+' | '+MP_LEVELS.map((l,i)=>l+' : '+(r.cells[i]?r.cells[i].note+'/20 ('+mpFmt(r.cells[i].time)+(mp.exam?', '+r.cells[i].exits+' sortie(s), '+mpFmt(r.cells[i].away)+' hors page':'')+')':'—')).join(' | ')+' | sorties : '+r.exits).join('\n');
-  try{navigator.clipboard.writeText(t);mpToast('Résultats copiés ✓');}catch(e){}
+  try{navigator.clipboard.writeText(t);mpToast('Résultats copiés ✓');const b=document.getElementById('mp-copybtn');if(b){b.textContent='✔ Copié';setTimeout(()=>{const c=document.getElementById('mp-copybtn');if(c)c.textContent='📋 Copier';},1200);}}catch(e){}
 }
 
 
