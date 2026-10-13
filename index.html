@@ -104,7 +104,8 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-chk span{color:#8aabcc}
 
 .mp-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:.45rem;vertical-align:middle}
-.mp-cell{display:inline-block;font-weight:700;border-radius:8px;padding:.3rem .6rem}
+.mp-cell{display:inline-block;font-weight:700;border-radius:8px;padding:.35rem .6rem;text-align:left}
+.mp-sub{display:block;font-size:.62rem;font-weight:600;opacity:.92;margin-top:.15rem}
 .mp-cell small{opacity:.8;font-weight:600;margin-left:.3rem}
 </style>
 </head>
@@ -175,7 +176,7 @@ const MP_OPTS={debug:0,config:{iceServers:[
   {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ]}};
-let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},state:'salon',lastSig:'',lastSend:0,forceSend:false};
+let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false};
 
 function mpBox(h){document.getElementById('mp-box').innerHTML=h;}
 function mpEsc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -186,7 +187,7 @@ function mpClean(){
   try{mp.conns.forEach(c=>c.close());}catch(e){}
   try{if(mp.hostConn)mp.hostConn.close();}catch(e){}
   try{if(mp.peer)mp.peer.destroy();}catch(e){}
-  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},state:'salon',lastSig:'',lastSend:0,forceSend:false};
+  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false};
   mpUi();
 }
 function mpOpen(){
@@ -323,8 +324,10 @@ function mpScan(){
   const r=mpRead();
   if(r){
     mp.state=r.state;
+    mp.curLevel=(r.state==='run')?r.level:null;
     if(r.state==='done'&&r.level&&!mp.done[r.level]){
-      mp.done[r.level]={note:r.note,time:r.time,coups:r.coups,score:r.score};
+      const x=mp.lv[r.level]||{n:0,away:0};
+      mp.done[r.level]={note:r.note,time:r.time,coups:r.coups,score:r.score,exits:x.n,away:x.away};
       mp.forceSend=true;
     }
   }
@@ -332,7 +335,7 @@ function mpScan(){
 }
 function mpGuestStart(exam){
   if(mp.started)return;
-  mp.exam=exam;mp.started=true;mp.exits=0;mp.away=0;mp.hiddenAt=0;mp.done={};mp.state='menu';mp.lastSig='';mp.forceSend=false;
+  mp.exam=exam;mp.started=true;mp.exits=0;mp.away=0;mp.hiddenAt=0;mp.done={};mp.lv={};mp.curLevel=null;mp.hiddenLevel=null;mp.state='menu';mp.lastSig='';mp.forceSend=false;
   document.getElementById('mp-modal').classList.remove('show');
   openPage('quiz');
   clearInterval(mp.tick);
@@ -356,8 +359,17 @@ function mpTick(force){
 document.addEventListener('visibilitychange',()=>{
   if(mp.role!=='guest'||!mp.started||!mp.exam)return;
   if(document.hidden){
-    if(mpLocked()){mp.exits++;mp.hiddenAt=Date.now();mpTick(true);}
-  }else if(mp.hiddenAt){mp.away+=Date.now()-mp.hiddenAt;mp.hiddenAt=0;mpTick(true);}
+    if(mpLocked()){
+      mp.exits++;mp.hiddenAt=Date.now();mp.hiddenLevel=mp.curLevel;
+      if(mp.curLevel){const x=mp.lv[mp.curLevel]||(mp.lv[mp.curLevel]={n:0,away:0});x.n++;}
+      mpTick(true);
+    }
+  }else if(mp.hiddenAt){
+    const dur=Date.now()-mp.hiddenAt;
+    mp.away+=dur;mp.hiddenAt=0;
+    if(mp.hiddenLevel&&mp.lv[mp.hiddenLevel])mp.lv[mp.hiddenLevel].away+=dur;
+    mp.hiddenLevel=null;mpTick(true);
+  }
 });
 window.addEventListener('beforeunload',e=>{if(mpLocked()){e.preventDefault();e.returnValue='';}});
 
@@ -375,7 +387,7 @@ function mpResRows(){
     if(e.disc)st+=' ⚠ déconnecté';
     return {
       name:e.name,pal:MP_PAL[e.pi%MP_PAL.length],state:st,
-      cells:MP_LEVELS.map(l=>lv[l]?{note:lv[l].note,time:lv[l].time}:null),
+      cells:MP_LEVELS.map(l=>lv[l]?{note:lv[l].note,time:lv[l].time,exits:lv[l].exits||0,away:lv[l].away||0}:null),
       exits:mp.exam?(e.exits+(e.away?' ('+mpFmt(e.away)+' hors page)':'')):'—',
       bad:mp.exam&&e.exits>0
     };
@@ -388,16 +400,119 @@ function mpRenderRes(){
   const body=rows.length?rows.map(r=>`<tr>
     <td><span class="mp-dot" style="background:${r.pal.bg}"></span><b>${mpEsc(r.name)}</b></td>
     <td>${mpEsc(r.state)}</td>
-    ${r.cells.map(c=>c?`<td><span class="mp-cell" style="background:${r.pal.bg};color:${r.pal.fg}">${mpEsc(c.note)} / 20<small>${mpFmt(c.time)}</small></span></td>`:'<td></td>').join('')}
+    ${r.cells.map(c=>c?`<td><span class="mp-cell" style="background:${r.pal.bg};color:${r.pal.fg}">${mpEsc(c.note)} / 20<small>${mpFmt(c.time)}</small>${mp.exam?`<span class="mp-sub">🚪 ${c.exits} sortie${c.exits>1?'s':''} · ${mpFmt(c.away)} hors page</span>`:''}</span></td>`:'<td></td>').join('')}
     <td class="${r.bad?'bad':''}">${mpEsc(r.exits)}</td></tr>`).join(''):'<tr><td colspan="6">Aucun joueur pour le moment.</td></tr>';
   document.getElementById('mp-resbox').innerHTML=`<div class="mp-title">📊 Résultats — partie ${mp.code}</div>
     <div class="mp-txt">Mode surveillé : <b>${mp.exam?'activé':'désactivé'}</b> · mise à jour en direct · chaque joueur a sa couleur, une case apparaît pour chaque niveau terminé (note + temps).</div>
-    <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr><th>Joueur</th><th>État</th>${MP_LEVELS.map(l=>'<th>'+l+'</th>').join('')}<th>Sorties de page</th></tr></thead><tbody>${body}</tbody></table></div>
-    <div class="mp-row"><button class="mp-btn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn main" onclick="mpResClose()">Fermer</button></div>`;
+    <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr><th>Joueur</th><th>État</th>${MP_LEVELS.map(l=>'<th>'+l+'</th>').join('')}<th>Total sorties de page</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="mp-row"><button class="mp-btn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn" onclick="mpResDownload()">⬇ Excel (.xlsx)</button><button class="mp-btn main" onclick="mpResClose()">Fermer</button></div>`;
 }
 function mpResCopy(){
-  const t=mpResRows().map(r=>r.name+' | '+r.state+' | '+MP_LEVELS.map((l,i)=>l+' : '+(r.cells[i]?r.cells[i].note+'/20 ('+mpFmt(r.cells[i].time)+')':'—')).join(' | ')+' | sorties : '+r.exits).join('\n');
+  const t=mpResRows().map(r=>r.name+' | '+r.state+' | '+MP_LEVELS.map((l,i)=>l+' : '+(r.cells[i]?r.cells[i].note+'/20 ('+mpFmt(r.cells[i].time)+(mp.exam?', '+r.cells[i].exits+' sortie(s), '+mpFmt(r.cells[i].away)+' hors page':'')+')':'—')).join(' | ')+' | sorties : '+r.exits).join('\n');
   try{navigator.clipboard.writeText(t);mpToast('Résultats copiés ✓');}catch(e){}
+}
+
+
+/* ----- export Excel (.xlsx) sans bibliothèque ----- */
+let _mpCrcT=null;
+function mpCrc(u8){
+  if(!_mpCrcT){_mpCrcT=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;_mpCrcT[n]=c>>>0;}}
+  let crc=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++)crc=_mpCrcT[(crc^u8[i])&255]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function mpZip(files){
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+  const now=new Date();
+  const dt=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1);
+  const dd=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
+  files.forEach(f=>{
+    const nm=enc.encode(f.name),data=enc.encode(f.text),crc=mpCrc(data),sz=data.length;
+    const h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(8,0,true);
+    h.setUint16(10,dt,true);h.setUint16(12,dd,true);h.setUint32(14,crc,true);h.setUint32(18,sz,true);h.setUint32(22,sz,true);
+    h.setUint16(26,nm.length,true);h.setUint16(28,0,true);
+    parts.push(new Uint8Array(h.buffer),nm,data);
+    const c=new DataView(new ArrayBuffer(46));
+    c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(10,0,true);
+    c.setUint16(12,dt,true);c.setUint16(14,dd,true);c.setUint32(16,crc,true);c.setUint32(20,sz,true);c.setUint32(24,sz,true);
+    c.setUint16(28,nm.length,true);c.setUint16(30,0,true);c.setUint16(32,0,true);c.setUint16(34,0,true);c.setUint16(36,0,true);
+    c.setUint32(38,0,true);c.setUint32(42,off,true);
+    cen.push(new Uint8Array(c.buffer),nm);
+    off+=30+nm.length+sz;
+  });
+  const cenSize=cen.reduce((a,b)=>a+b.length,0);
+  const e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(4,0,true);e.setUint16(6,0,true);
+  e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);
+  e.setUint32(12,cenSize,true);e.setUint32(16,off,true);e.setUint16(20,0,true);
+  return new Blob(parts.concat(cen,[new Uint8Array(e.buffer)]),{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function mpX(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function mpXlsx(){
+  const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const hex=c=>c.replace('#','').toUpperCase();
+  /* styles : 0 normal · 1 en-tête · 2 case simple · 3+i couleur du joueur i */
+  const fonts='<font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
+    +MP_PAL.map(p=>'<font><b/><sz val="11"/><color rgb="FF'+hex(p.fg)+'"/><name val="Calibri"/></font>').join('');
+  const fills='<fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F2937"/><bgColor indexed="64"/></patternFill></fill>'
+    +MP_PAL.map(p=>'<fill><patternFill patternType="solid"><fgColor rgb="FF'+hex(p.bg)+'"/><bgColor indexed="64"/></patternFill></fill>').join('');
+  const bd='<border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border>';
+  const al='<alignment horizontal="center" vertical="center" wrapText="1"/>';
+  const xfs='<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+    +'<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'+al+'</xf>'
+    +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1">'+al+'</xf>'
+    +MP_PAL.map((p,i)=>'<xf numFmtId="0" fontId="'+(2+i)+'" fillId="'+(3+i)+'" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'+al+'</xf>').join('');
+  const styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="'+NS+'"><fonts count="'+(2+MP_PAL.length)+'">'+fonts+'</fonts><fills count="'+(3+MP_PAL.length)+'">'+fills+'</fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+bd+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+(3+MP_PAL.length)+'">'+xfs+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+  const col=i=>String.fromCharCode(65+i);
+  const head=['Joueur','État'];
+  MP_LEVELS.forEach(l=>head.push(l+' – note /20',l+' – temps',l+' – sorties de page',l+' – temps hors page'));
+  head.push('Total sorties de page','Total temps hors page');
+  const cell=(r,c,v,st)=>{
+    const ref=col(c)+r;
+    if(v===''||v==null)return '<c r="'+ref+'" s="'+st+'"/>';
+    if(typeof v==='number')return '<c r="'+ref+'" s="'+st+'"><v>'+v+'</v></c>';
+    return '<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t>'+mpX(v)+'</t></is></c>';
+  };
+  let rowsXml='<row r="1" ht="32" customHeight="1">'+head.map((h,i)=>cell(1,i,h,1)).join('')+'</row>';
+  Object.values(mp.results).forEach((e,k)=>{
+    const r=k+2,ps=3+(e.pi%MP_PAL.length),lv=e.levels||{};
+    let st=MP_LBL[e.state]||e.state;
+    if(e.state==='run')st+=' ('+e.level+')';
+    if(e.disc)st+=' - déconnecté';
+    const cs=[cell(r,0,e.name,ps),cell(r,1,st,2)];
+    MP_LEVELS.forEach((l,i)=>{
+      const d=lv[l],b=2+i*4;
+      if(d){
+        cs.push(cell(r,b,Number(d.note),ps),cell(r,b+1,mpFmt(d.time),ps),
+          cell(r,b+2,mp.exam?(d.exits||0):'—',ps),cell(r,b+3,mp.exam?mpFmt(d.away||0):'—',ps));
+      }else{
+        cs.push(cell(r,b,'',2),cell(r,b+1,'',2),cell(r,b+2,'',2),cell(r,b+3,'',2));
+      }
+    });
+    cs.push(cell(r,14,mp.exam?(e.exits||0):'—',2),cell(r,15,mp.exam?mpFmt(e.away||0):'—',2));
+    rowsXml+='<row r="'+r+'">'+cs.join('')+'</row>';
+  });
+  const cols='<cols><col min="1" max="1" width="18" customWidth="1"/><col min="2" max="2" width="24" customWidth="1"/><col min="3" max="16" width="15" customWidth="1"/></cols>';
+  const sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="'+NS+'"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+cols+'<sheetData>'+rowsXml+'</sheetData></worksheet>';
+  const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  return mpZip([
+    {name:'[Content_Types].xml',text:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+    {name:'_rels/.rels',text:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+R+'/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+    {name:'xl/workbook.xml',text:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="'+NS+'" xmlns:r="'+R+'"><sheets><sheet name="Résultats" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+    {name:'xl/_rels/workbook.xml.rels',text:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+R+'/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="'+R+'/styles" Target="styles.xml"/></Relationships>'},
+    {name:'xl/styles.xml',text:styles},
+    {name:'xl/worksheets/sheet1.xml',text:sheet}
+  ]);
+}
+function mpResDownload(){
+  try{
+    const blob=mpXlsx(),a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download='resultats-'+(mp.code||'partie')+'.xlsx';
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+  }catch(e){mpToast('Téléchargement impossible : '+e.message);}
 }
 
 /* ----- CRÉER ----- */
