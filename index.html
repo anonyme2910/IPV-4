@@ -456,10 +456,22 @@ function mpRenderRes(){
     return r1+(ex?r2:'');
   }).join(''):'<tr><td colspan="10">Aucun joueur pour le moment.</td></tr>';
   const head='<th>Joueur</th><th>État</th>'+MP_LEVELS.map(l=>'<th>'+l+' – note /20</th><th>'+l+' – temps</th>').join('')+'<th>Total sorties de page</th><th>Total temps hors page</th>';
-  document.getElementById('mp-resbox').innerHTML=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}</div>
+  const _html=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}</div>
     <div class="mp-tools"><button class="mp-btn" onclick="mpResToggle()">${mpResFull?'⤡ Réduire':'⤢ Plein écran'}</button><button class="mp-btn" id="mp-copybtn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn" onclick="mpResDownload()">⬇ Excel (.xlsx)</button><button class="mp-btn main" onclick="mpResClose()">✕ Fermer</button></div></div>
     <div class="mp-txt">Mode surveillé : <b>${ex?'activé':'désactivé'}</b> · mise à jour en direct · une couleur par joueur · sous chaque note : nombre de sorties de page et temps hors page.</div>
     <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  mpSetRes(_html);
+}
+/* Met à jour le tableau SANS remonter en haut : on garde le défilement (vertical + horizontal) */
+function mpSetRes(html){
+  const box=document.getElementById('mp-resbox');
+  if(box._html===html)return;               /* rien n'a changé : on ne touche à rien */
+  const w=box.querySelector('.mp-tbl-wrap');
+  const s={bt:box.scrollTop,bl:box.scrollLeft,wt:w?w.scrollTop:0,wl:w?w.scrollLeft:0};
+  box.innerHTML=html; box._html=html;
+  const w2=box.querySelector('.mp-tbl-wrap');
+  box.scrollTop=s.bt; box.scrollLeft=s.bl;
+  if(w2){w2.scrollTop=s.wt;w2.scrollLeft=s.wl;}
 }
 function mpResCopy(){
   const t=mpResRows().map(r=>r.name+' | '+r.state+' | '+MP_LEVELS.map((l,i)=>l+' : '+(r.cells[i]?r.cells[i].note+'/20 ('+mpFmt(r.cells[i].time)+(mp.exam?', '+r.cells[i].exits+' sortie(s), '+mpFmt(r.cells[i].away)+' hors page':'')+')':'—')).join(' | ')+' | sorties : '+r.exits).join('\n');
