@@ -171,14 +171,21 @@ function mpOpen(){
 function mpClose(){mpClean();document.getElementById('mp-modal').classList.remove('show');}
 function mpMenu(err){
   mpBox(`<div class="mp-title">👥 Multijoueur</div>
-    <div class="mp-txt">Choisis un pseudo, puis crée une partie (tu reçois un code à partager) ou rejoins celle d'un ami.</div>
-    <input class="mp-input" id="mp-name" maxlength="16" placeholder="Ton pseudo" value="${mpEsc(mp.name||'')}">
-    <input class="mp-input" id="mp-gamename" maxlength="30" placeholder="Nom/code de ta partie (facultatif)" value="${mpEsc(mp.wanted||'')}">
-    <div class="mp-txt" style="font-size:.66rem">Pour créer : choisis le nom que tu veux (3 à 20 lettres/chiffres, espaces et accents ignorés), ou laisse vide pour un code automatique.</div>
+    <div class="mp-txt">Que veux-tu faire ?</div>
     <div class="mp-err" id="mp-err">${err?mpEsc(err):''}</div>
-    <button class="mp-btn main" onclick="mpCreate()">➕ Créer une partie</button>
-    <button class="mp-btn" onclick="mpJoinForm()">🔑 Rejoindre avec un code</button>
+    <button class="mp-btn main" onclick="mpCreateForm()">➕ Créer une partie</button>
+    <button class="mp-btn" onclick="mpJoinForm()">🔑 Rejoindre une partie</button>
     <button class="mp-btn" onclick="mpClose()">Annuler</button>`);
+}
+function mpCreateForm(err){
+  mpBox(`<div class="mp-title">➕ Créer une partie</div>
+    <div class="mp-txt">Choisis ton pseudo :</div>
+    <input class="mp-input" id="mp-name" maxlength="16" placeholder="Ton pseudo" value="${mpEsc(mp.name||'')}">
+    <div class="mp-txt">Crée le code de ta partie (3 à 20 lettres/chiffres, espaces et accents ignorés) ou laisse vide pour un code automatique :</div>
+    <input class="mp-input code" id="mp-gamename" maxlength="30" placeholder="Code de la partie" autocomplete="off" value="${mpEsc(mp.wanted||'')}" onkeydown="if(event.key==='Enter')mpCreate()">
+    <div class="mp-err" id="mp-err">${err?mpEsc(err):''}</div>
+    <button class="mp-btn main" onclick="mpCreate()">Créer la partie</button>
+    <button class="mp-btn" onclick="mpMenu()">← Retour</button>`);
 }
 function mpGetName(){
   const v=(document.getElementById('mp-name')||{}).value||'';
@@ -205,10 +212,10 @@ function mpCreate(tries){
   peer.on('open',()=>mpHostLobby());
   peer.on('error',e=>{
     if(e.type==='unavailable-id'){
-      if(custom){mpMenu('Ce nom est déjà utilisé par une autre partie, choisis-en un autre.');return;}
+      if(custom){mpCreateForm('Ce code est déjà utilisé par une autre partie, choisis-en un autre.');return;}
       if(tries<5){mpCreate(tries+1);return;}
     }
-    mpMenu("Impossible de créer la partie ("+e.type+").");
+    mpCreateForm("Impossible de créer la partie ("+e.type+").");
   });
   peer.on('connection',conn=>{
     conn.on('data',d=>{
@@ -245,16 +252,17 @@ function mpStart(){
 
 /* ----- REJOINDRE ----- */
 function mpJoinForm(err){
-  mpGetName();
-  mpBox(`<div class="mp-title">🔑 Rejoindre</div>
-    <div class="mp-txt">Entre le nom/code donné par le créateur de la partie :</div>
-    <input class="mp-input code" id="mp-codein" maxlength="30" placeholder="Nom/code de la partie" autocomplete="off" onkeydown="if(event.key==='Enter')mpJoin()">
+  mpBox(`<div class="mp-title">🔑 Rejoindre une partie</div>
+    <div class="mp-txt">Choisis ton pseudo :</div>
+    <input class="mp-input" id="mp-name" maxlength="16" placeholder="Ton pseudo" value="${mpEsc(mp.name||'')}">
+    <div class="mp-txt">Entre le code de la partie (donné par son créateur) :</div>
+    <input class="mp-input code" id="mp-codein" maxlength="30" placeholder="Code de la partie" autocomplete="off" onkeydown="if(event.key==='Enter')mpJoin()">
     <div class="mp-err" id="mp-err">${err?mpEsc(err):''}</div>
     <button class="mp-btn main" onclick="mpJoin()">Rejoindre</button>
     <button class="mp-btn" onclick="mpMenu()">← Retour</button>`);
-  setTimeout(()=>{const i=document.getElementById('mp-codein');if(i)i.focus();},50);
 }
 function mpJoin(){
+  mpGetName();
   if(typeof Peer==='undefined'){mpErr("Connexion impossible : vérifie ta connexion internet.");return;}
   const code=mpNorm(document.getElementById('mp-codein').value);
   if(code.length<3){mpErr('Entre le nom/code de la partie (3 caractères minimum).');return;}
