@@ -144,6 +144,13 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 /* ───────── MULTIJOUEUR : créer / rejoindre une partie avec un code ───────── */
 const MP_PREFIX='ipv4quiz-';
 const MP_CHARS='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const MP_OPTS={debug:0,config:{iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:global.stun.twilio.com:3478'},
+  {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
+]}};
 let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[]};
 
 function mpBox(h){document.getElementById('mp-box').innerHTML=h;}
@@ -192,7 +199,8 @@ function mpCreate(tries){
   mpClean();mp.name=keepName;mp.wanted=keepWanted;
   tries=tries||0;
   const code=custom||mpGenCode();
-  const peer=new Peer(MP_PREFIX+code);
+  const peer=new Peer(MP_PREFIX+code,MP_OPTS);
+  peer.on('disconnected',()=>{try{if(!peer.destroyed)peer.reconnect();}catch(e){}});
   mp.peer=peer;mp.role='host';mp.code=code;mp.players=[mp.name];
   peer.on('open',()=>mpHostLobby());
   peer.on('error',e=>{
@@ -252,11 +260,11 @@ function mpJoin(){
   if(code.length<3){mpErr('Entre le nom/code de la partie (3 caractères minimum).');return;}
   const keep=mp.name;mpClean();mp.name=keep;
   mpErr('Connexion…');
-  const peer=new Peer();
+  const peer=new Peer(undefined,MP_OPTS);
   mp.peer=peer;mp.role='guest';mp.code=code;
   let ok=false;
   const fail=m=>{if(!ok){const n=mp.name;mpClean();mp.name=n;mpJoinForm(m);}};
-  const timer=setTimeout(()=>fail('Partie introuvable. Vérifie le code.'),9000);
+  const timer=setTimeout(()=>fail('Connexion impossible (réseau bloqué ?). Vérifie le nom, que la partie est toujours ouverte, et réessaie.'),25000);
   peer.on('error',e=>{clearTimeout(timer);fail(e.type==='peer-unavailable'?'Partie introuvable. Vérifie le code.':'Erreur de connexion ('+e.type+').');});
   peer.on('open',()=>{
     const conn=peer.connect(MP_PREFIX+code,{reliable:true});
