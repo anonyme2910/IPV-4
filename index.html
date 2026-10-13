@@ -102,6 +102,10 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-tbl td.bad{color:#ff8a8a;font-weight:700}
 .mp-chk{display:flex;gap:.6rem;align-items:flex-start;font-size:.72rem;color:#cfe3f5;line-height:1.5;cursor:pointer}
 .mp-chk span{color:#8aabcc}
+
+.mp-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:.45rem;vertical-align:middle}
+.mp-cell{display:inline-block;font-weight:700;border-radius:8px;padding:.3rem .6rem}
+.mp-cell small{opacity:.8;font-weight:600;margin-left:.3rem}
 </style>
 </head>
 <body>
@@ -171,7 +175,7 @@ const MP_OPTS={debug:0,config:{iceServers:[
   {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ]}};
-let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,fin:false,finSent:false,lastSig:'',lastSend:0};
+let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},state:'salon',lastSig:'',lastSend:0,forceSend:false};
 
 function mpBox(h){document.getElementById('mp-box').innerHTML=h;}
 function mpEsc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -182,7 +186,7 @@ function mpClean(){
   try{mp.conns.forEach(c=>c.close());}catch(e){}
   try{if(mp.hostConn)mp.hostConn.close();}catch(e){}
   try{if(mp.peer)mp.peer.destroy();}catch(e){}
-  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,fin:false,finSent:false,lastSig:'',lastSend:0};
+  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},state:'salon',lastSig:'',lastSend:0,forceSend:false};
   mpUi();
 }
 function mpOpen(){
@@ -234,7 +238,7 @@ function mpGetName(){
 function mpErr(t){const e=document.getElementById('mp-err');if(e)e.textContent=t;}
 
 
-/* ───────── MODE SURVEILLÉ + RÉSULTATS ───────── */
+/* ───────── MODE SURVEILLÉ + RÉSULTATS + NIVEAUX UNIQUES ───────── */
 const MP_Q=`(function(){
  if(typeof diff==='undefined')return null;
  if(!diff)return{state:'menu'};
@@ -244,15 +248,24 @@ const MP_Q=`(function(){
  const penalty=diff.noteLoss*Math.floor(extra/diff.notePer);
  const reached=score>=20;
  const note=reached?Math.max(0,20-penalty):fmt(Math.round(score*2)/2);
- return{state:done?'done':'run',level:diff.label,score:score,coups:coups,note:done?note:null,time:getElapsed()};
+ return{state:done?'done':'run',level:diff.label,score:score,coups:coups,note:done?note:null,time:getElapsed(),locked:lockedIn};
 })()`;
-const MP_LBL={salon:'Au salon',menu:'Choix du niveau',run:'En cours',done:'Terminé'};
+const MP_LEVELS=['Facile','Moyen','Difficile'];
+const MP_PAL=[
+  {bg:'#8b5cf6',fg:'#ffffff'},{bg:'#22c55e',fg:'#052e14'},{bg:'#3b82f6',fg:'#ffffff'},{bg:'#f97316',fg:'#2a1200'},
+  {bg:'#ec4899',fg:'#ffffff'},{bg:'#06b6d4',fg:'#03262d'},{bg:'#eab308',fg:'#2a2000'},{bg:'#ef4444',fg:'#ffffff'}
+];
+const MP_LBL={salon:'Au salon',menu:'Au menu',run:'En cours',done:'Niveau terminé'};
 function mpFmt(ms){const s=Math.floor((ms||0)/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 function mpRead(){try{return document.getElementById('f-quiz').contentWindow.eval(MP_Q);}catch(e){return null;}}
 function mpToast(t){const e=document.getElementById('mp-toast');if(!e)return;e.textContent=t;e.style.display='block';clearTimeout(mpToast._t);mpToast._t=setTimeout(()=>{e.style.display='none';},3500);}
+function mpDoneCount(){return Object.keys(mp.done).length;}
+/* surveillé = verrouillé tant qu'un niveau est en cours, ou tant qu'aucun niveau n'a été terminé */
+function mpIsLocked(){return !(mpDoneCount()>0&&mp.state!=='run');}
 function mpLocked(){
-  if(mp.role==='guest'&&mp.started&&mp.exam&&!mp.fin){const r=mpRead();if(r&&r.state==='done'){mpTick(true);}}
-  return mp.role==='guest'&&mp.started&&mp.exam&&!mp.fin;
+  if(!(mp.role==='guest'&&mp.started&&mp.exam))return false;
+  mpScan();
+  return mpIsLocked();
 }
 function mpUi(){
   const rb=document.getElementById('mp-resbtn');
@@ -261,56 +274,108 @@ function mpUi(){
   if(b){
     const on=mp.role==='guest'&&mp.started&&mp.exam;
     b.style.display=on?'block':'none';
-    if(on)b.textContent=mp.fin?'✅ Terminé — résultat envoyé au créateur':'🔒 Mode surveillé · sorties de page : '+mp.exits;
+    if(on)b.textContent=mpIsLocked()?'🔒 Mode surveillé · sorties de page : '+mp.exits:'✅ '+mpDoneCount()+' niveau(x) terminé(s) · sorties de page : '+mp.exits;
   }
 }
 
-/* invité */
+/* ----- invité : un niveau = une seule fois, pas de changement après validation ----- */
+function mpGuard(){
+  if(mp.role!=='guest'||!mp.started)return;
+  let w;try{w=document.getElementById('f-quiz').contentWindow;}catch(e){return;}
+  if(!w||typeof w.chooseDiff!=='function'||!w.document||!w.document.getElementById('app'))return;
+  if(!w.__mpg){
+    w.__mpg=true;
+    const oc=w.chooseDiff,ol=w.changeLevel;
+    w.chooseDiff=function(d){
+      if(mp.role==='guest'&&mp.started&&d&&mp.done[d.label]){mpToast('Tu as déjà fait le niveau '+d.label+' : choisis un autre niveau.');return;}
+      return oc.apply(this,arguments);
+    };
+    w.changeLevel=function(){
+      if(mp.role==='guest'&&mp.started){
+        let lk=false;try{lk=!!w.eval('lockedIn&&!won&&!finished');}catch(e){}
+        if(lk){mpToast('Tu as déjà validé une réponse : impossible de changer de niveau.');return;}
+      }
+      return ol.apply(this,arguments);
+    };
+    try{new w.MutationObserver(()=>mpMark(w)).observe(w.document.getElementById('app'),{childList:true,subtree:true});}catch(e){}
+  }
+  mpMark(w);
+}
+function mpMark(w){
+  try{
+    if(!(mp.role==='guest'&&mp.started))return;
+    w.document.querySelectorAll('.diff-btn').forEach(b=>{
+      const nm=b.querySelector('.diff-name');
+      const d=nm&&mp.done[nm.textContent.trim()];
+      if(!d)return;
+      b.style.opacity='.4';b.style.cursor='not-allowed';b.style.filter='grayscale(1)';
+      if(!b.querySelector('.mp-done-tag')){
+        const t=w.document.createElement('span');
+        t.className='mp-done-tag';
+        t.style.cssText='font-size:11px;font-weight:800;color:#a8e08a;margin-top:4px';
+        t.textContent='✔ Déjà fait · '+d.note+' / 20';
+        b.appendChild(t);
+      }
+    });
+  }catch(e){}
+}
+function mpScan(){
+  const r=mpRead();
+  if(r){
+    mp.state=r.state;
+    if(r.state==='done'&&r.level&&!mp.done[r.level]){
+      mp.done[r.level]={note:r.note,time:r.time,coups:r.coups,score:r.score};
+      mp.forceSend=true;
+    }
+  }
+  return r;
+}
 function mpGuestStart(exam){
   if(mp.started)return;
-  mp.exam=exam;mp.started=true;mp.exits=0;mp.away=0;mp.hiddenAt=0;mp.fin=false;mp.finSent=false;mp.lastSig='';
+  mp.exam=exam;mp.started=true;mp.exits=0;mp.away=0;mp.hiddenAt=0;mp.done={};mp.state='menu';mp.lastSig='';mp.forceSend=false;
   document.getElementById('mp-modal').classList.remove('show');
   openPage('quiz');
   clearInterval(mp.tick);
-  mp.tick=setInterval(()=>mpTick(false),1500);
+  mp.tick=setInterval(()=>mpTick(false),500);
   mpTick(true);mpUi();
 }
 function mpTick(force){
-  if(mp.role!=='guest'||!mp.started||!mp.hostConn||!mp.hostConn.open)return;
-  if(mp.fin&&mp.finSent){mpUi();return;}
-  const r=mpRead()||{state:'menu'};
-  if(r.state==='done'&&!mp.fin){mp.fin=true;force=true;}
+  if(mp.role!=='guest'||!mp.started)return;
+  mpGuard();
+  const r=mpScan()||{state:'menu'};
+  if(!mp.hostConn||!mp.hostConn.open){mpUi();return;}
   const away=mp.away+(mp.hiddenAt?Date.now()-mp.hiddenAt:0);
-  const st={t:'status',state:r.state,level:r.level||'-',score:r.score||0,coups:r.coups||0,note:r.note==null?null:r.note,time:r.time||0,exits:mp.exits,away:away};
-  const sig=[st.state,st.level,st.score,st.coups,st.note,st.exits,Math.floor(away/2000)].join('|');
+  const st={t:'status',state:r.state,level:r.level||'-',score:r.score||0,coups:r.coups||0,note:r.note==null?null:r.note,time:r.time||0,exits:mp.exits,away:away,levels:mp.done};
+  const sig=[st.state,st.level,st.score,st.coups,st.note,st.exits,Math.floor(away/2000),mpDoneCount()].join('|');
   const now=Date.now();
-  if(force||sig!==mp.lastSig||now-mp.lastSend>5000){
-    mp.lastSig=sig;mp.lastSend=now;
-    try{mp.hostConn.send(st);if(mp.fin)mp.finSent=true;}catch(e){}
+  if(force||mp.forceSend||sig!==mp.lastSig||now-mp.lastSend>5000){
+    try{mp.hostConn.send(st);mp.lastSig=sig;mp.lastSend=now;mp.forceSend=false;}catch(e){}
   }
   mpUi();
 }
 document.addEventListener('visibilitychange',()=>{
-  if(mp.role!=='guest'||!mp.started||!mp.exam||mp.fin)return;
-  if(document.hidden){mp.exits++;mp.hiddenAt=Date.now();mpTick(true);}
-  else if(mp.hiddenAt){mp.away+=Date.now()-mp.hiddenAt;mp.hiddenAt=0;mpTick(true);}
+  if(mp.role!=='guest'||!mp.started||!mp.exam)return;
+  if(document.hidden){
+    if(mpLocked()){mp.exits++;mp.hiddenAt=Date.now();mpTick(true);}
+  }else if(mp.hiddenAt){mp.away+=Date.now()-mp.hiddenAt;mp.hiddenAt=0;mpTick(true);}
 });
 window.addEventListener('beforeunload',e=>{if(mpLocked()){e.preventDefault();e.returnValue='';}});
 
-/* créateur */
+/* ----- créateur : tableau des résultats ----- */
 function mpEntry(conn){
-  return mp.results[conn.peer]||(mp.results[conn.peer]={name:conn._name||'Joueur',state:'salon',level:'-',score:0,coups:0,note:null,time:0,exits:0,away:0,disc:false});
+  return mp.results[conn.peer]||(mp.results[conn.peer]={name:conn._name||'Joueur',pi:Object.keys(mp.results).length,state:'salon',level:'-',score:0,coups:0,note:null,time:0,exits:0,away:0,levels:{},disc:false});
 }
 function mpResOpen(){document.getElementById('mp-res').classList.add('show');mpRenderRes();}
 function mpResClose(){document.getElementById('mp-res').classList.remove('show');}
 function mpResRows(){
   return Object.values(mp.results).map(e=>{
-    const started=(e.state==='run'||e.state==='done');
+    const lv=e.levels||{};
+    let st=MP_LBL[e.state]||e.state;
+    if(e.state==='run')st+=' ('+e.level+')';
+    if(e.disc)st+=' ⚠ déconnecté';
     return {
-      name:e.name,level:e.level||'-',
-      state:(MP_LBL[e.state]||e.state)+(e.disc?' ⚠ déconnecté':''),
-      note:e.note==null?'—':e.note+' / 20',
-      time:started?mpFmt(e.time):'—',
+      name:e.name,pal:MP_PAL[e.pi%MP_PAL.length],state:st,
+      cells:MP_LEVELS.map(l=>lv[l]?{note:lv[l].note,time:lv[l].time}:null),
       exits:mp.exam?(e.exits+(e.away?' ('+mpFmt(e.away)+' hors page)':'')):'—',
       bad:mp.exam&&e.exits>0
     };
@@ -320,14 +385,18 @@ function mpRenderRes(){
   const m=document.getElementById('mp-res');
   if(!m||!m.classList.contains('show'))return;
   const rows=mpResRows();
-  const body=rows.length?rows.map(r=>`<tr><td>${mpEsc(r.name)}</td><td>${mpEsc(r.level)}</td><td>${mpEsc(r.state)}</td><td>${mpEsc(r.note)}</td><td>${r.time}</td><td class="${r.bad?'bad':''}">${mpEsc(r.exits)}</td></tr>`).join(''):'<tr><td colspan="6">Aucun joueur pour le moment.</td></tr>';
+  const body=rows.length?rows.map(r=>`<tr>
+    <td><span class="mp-dot" style="background:${r.pal.bg}"></span><b>${mpEsc(r.name)}</b></td>
+    <td>${mpEsc(r.state)}</td>
+    ${r.cells.map(c=>c?`<td><span class="mp-cell" style="background:${r.pal.bg};color:${r.pal.fg}">${mpEsc(c.note)} / 20<small>${mpFmt(c.time)}</small></span></td>`:'<td></td>').join('')}
+    <td class="${r.bad?'bad':''}">${mpEsc(r.exits)}</td></tr>`).join(''):'<tr><td colspan="6">Aucun joueur pour le moment.</td></tr>';
   document.getElementById('mp-resbox').innerHTML=`<div class="mp-title">📊 Résultats — partie ${mp.code}</div>
-    <div class="mp-txt">Mode surveillé : <b>${mp.exam?'activé':'désactivé'}</b> · mise à jour en direct</div>
-    <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr><th>Joueur</th><th>Niveau</th><th>État</th><th>Note</th><th>Temps</th><th>Sorties de page</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="mp-txt">Mode surveillé : <b>${mp.exam?'activé':'désactivé'}</b> · mise à jour en direct · chaque joueur a sa couleur, une case apparaît pour chaque niveau terminé (note + temps).</div>
+    <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr><th>Joueur</th><th>État</th>${MP_LEVELS.map(l=>'<th>'+l+'</th>').join('')}<th>Sorties de page</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="mp-row"><button class="mp-btn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn main" onclick="mpResClose()">Fermer</button></div>`;
 }
 function mpResCopy(){
-  const t=mpResRows().map(r=>r.name+' | niveau : '+r.level+' | '+r.state+' | note : '+r.note+' | temps : '+r.time+' | sorties : '+r.exits).join('\n');
+  const t=mpResRows().map(r=>r.name+' | '+r.state+' | '+MP_LEVELS.map((l,i)=>l+' : '+(r.cells[i]?r.cells[i].note+'/20 ('+mpFmt(r.cells[i].time)+')':'—')).join(' | ')+' | sorties : '+r.exits).join('\n');
   try{navigator.clipboard.writeText(t);mpToast('Résultats copiés ✓');}catch(e){}
 }
 
@@ -365,7 +434,7 @@ function mpCreate(tries){
         mpBroadcastPlayers();mpRenderRes();
       }else if(d.t==='status'){
         const e=mpEntry(conn);
-        Object.assign(e,{state:d.state,level:d.level,score:d.score,coups:d.coups,note:d.note,time:d.time,exits:d.exits,away:d.away});
+        Object.assign(e,{state:d.state,level:d.level,score:d.score,coups:d.coups,note:d.note,time:d.time,exits:d.exits,away:d.away,levels:d.levels||{}});
         mpRenderRes();
       }
     });
@@ -711,6 +780,11 @@ function setCoursLabel(t){
 /* Retour du QUIZ : d'abord au choix du niveau, puis à l'accueil */
 function backQuiz(){
   if(typeof mpLocked==='function'&&mpLocked()){mpToast('🔒 Mode surveillé : tu ne peux pas quitter le Quiz avant de l\'avoir terminé.');return;}
+  if(typeof mp!=='undefined'&&mp.role==='guest'&&mp.started){
+    let lk=false;
+    try{lk=!!document.getElementById('f-quiz').contentWindow.eval('lockedIn&&!won&&!finished');}catch(e){}
+    if(lk){goHome();return;}
+  }
   let handled = false;
   try{
     const w = document.getElementById('f-quiz').contentWindow;
