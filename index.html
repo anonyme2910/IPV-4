@@ -120,6 +120,14 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-head{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap}
 .mp-tools{display:flex;gap:.5rem;flex-wrap:wrap}
 .mp-tools .mp-btn{padding:.55rem .9rem;white-space:nowrap}
+
+/* ───────── EXPORT (flèche) + EXPULSION ───────── */
+.mp-split{display:flex}
+.mp-tools .mp-split .mp-btn:first-child{border-radius:12px 0 0 12px}
+.mp-tools .mp-split .mp-arrow{border-radius:0 12px 12px 0;border-left:1px solid #6b4a00;padding:.55rem .65rem}
+.mp-kick{background:none;border:0;cursor:pointer;font-size:.9rem;opacity:.55;margin-left:.5rem;padding:.15rem .35rem;border-radius:6px;line-height:1}
+.mp-kick:hover{opacity:1;background:rgba(255,80,80,.2)}
+.mp-player.has-kick{display:flex;align-items:center;justify-content:space-between}
 </style>
 </head>
 <body>
@@ -195,7 +203,7 @@ const MP_OPTS={debug:0,config:{iceServers:[
   {urls:'turn:freestun.net:3478',username:'free',credential:'free'},
   {urls:'turns:freestun.net:5349',username:'free',credential:'free'}
 ]}};
-let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false};
+let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false,kicked:{}};
 
 function mpBox(h){document.getElementById('mp-box').innerHTML=h;}
 function mpEsc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -203,10 +211,11 @@ function mpNorm(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f
 function mpGenCode(){let c='';for(let i=0;i<5;i++)c+=MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];return c;}
 function mpClean(){
   try{clearInterval(mp.tick);}catch(e){}
+  mpConfirmClose();mpDlClose();
   try{mp.conns.forEach(c=>c.close());}catch(e){}
   try{if(mp.hostConn)mp.hostConn.close();}catch(e){}
   try{if(mp.peer)mp.peer.destroy();}catch(e){}
-  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false};
+  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false,kicked:{}};
   mpUi();
 }
 function mpOpen(){
@@ -394,7 +403,7 @@ window.addEventListener('beforeunload',e=>{if(mpLocked()){e.preventDefault();e.r
 
 /* ----- créateur : tableau des résultats ----- */
 function mpEntry(conn){
-  return mp.results[conn.peer]||(mp.results[conn.peer]={name:conn._name||'Joueur',pi:Object.keys(mp.results).length,state:'salon',level:'-',score:0,coups:0,note:null,time:0,exits:0,away:0,levels:{},disc:false});
+  return mp.results[conn.peer]||(mp.results[conn.peer]={id:conn.peer,name:conn._name||'Joueur',pi:Object.keys(mp.results).length,state:'salon',level:'-',score:0,coups:0,note:null,time:0,exits:0,away:0,levels:{},disc:false});
 }
 let mpResFull=true;
 function mpResFs(on){
@@ -412,6 +421,7 @@ function mpResOpen(){
   mpResFs(true);
 }
 function mpResClose(){
+  mpConfirmClose();mpDlClose();
   mpResFs(false);
   document.getElementById('mp-res').classList.remove('show','full');
 }
@@ -448,7 +458,7 @@ function mpRenderRes(){
     if(e.state==='run')st+=' ('+e.level+')';
     if(e.disc)st+=' ⚠ déconnecté';
     const cs=(txt,bg,fg)=>`<td><span class="mp-cell" style="background:${bg};color:${fg}">${mpEsc(txt)}</span></td>`;
-    let r1=`<tr><td rowspan="${rs}"><span class="mp-dot" style="background:${pal.bg}"></span><b>${mpEsc(e.name)}</b></td><td rowspan="${rs}">${mpEsc(st)}</td>`;
+    let r1=`<tr><td rowspan="${rs}" oncontextmenu="event.preventDefault();mpAskKick('${mpEsc(e.id)}')"><span class="mp-dot" style="background:${pal.bg}"></span><b>${mpEsc(e.name)}</b><button class="mp-kick" title="Expulser ce joueur" onclick="mpAskKick('${mpEsc(e.id)}')">🗑</button></td><td rowspan="${rs}">${mpEsc(st)}</td>`;
     let r2='<tr>';
     MP_LEVELS.forEach(l=>{
       const d=lv[l];
@@ -463,7 +473,7 @@ function mpRenderRes(){
   }).join(''):'<tr><td colspan="10">Aucun joueur pour le moment.</td></tr>';
   const head='<th>Joueur</th><th>État</th>'+MP_LEVELS.map(l=>'<th>'+l+' – note /20</th><th>'+l+' – temps</th>').join('')+'<th>Total sorties de page</th><th>Total temps hors page</th>';
   const _html=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}</div>
-    <div class="mp-tools"><button class="mp-btn" onclick="mpResToggle()">${mpResFull?'⤡ Réduire':'⤢ Plein écran'}</button><button class="mp-btn" id="mp-copybtn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn" onclick="mpResDownload()">⬇ Excel (.xlsx)</button><button class="mp-btn main" onclick="mpResClose()">✕ Fermer</button></div></div>
+    <div class="mp-tools"><button class="mp-btn" onclick="mpResToggle()">${mpResFull?'⤡ Réduire':'⤢ Plein écran'}</button><button class="mp-btn" id="mp-copybtn" onclick="mpResCopy()">📋 Copier</button><div class="mp-split"><button class="mp-btn" onclick="mpResDownload()">⬇ Excel (.xlsx)</button><button class="mp-btn mp-arrow" title="Choisir le format" onclick="mpDlMenu(event)">▾</button></div><button class="mp-btn main" onclick="mpResClose()">✕ Fermer</button></div></div>
     <div class="mp-txt">Mode surveillé : <b>${ex?'activé':'désactivé'}</b> · mise à jour en direct · une couleur par joueur · sous chaque note : nombre de sorties de page et temps hors page.</div>
     <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   mpSetRes(_html);
@@ -602,6 +612,182 @@ function mpResDownload(){
   }catch(e){mpToast('Téléchargement impossible : '+e.message);}
 }
 
+
+/* ----- menu de téléchargement (flèche ▾) ----- */
+function mpDlClose(){const m=document.getElementById('mp-dlmenu');if(m)m.remove();}
+function mpDlMenu(ev){
+  ev.stopPropagation();
+  if(document.getElementById('mp-dlmenu')){mpDlClose();return;}
+  const r=ev.currentTarget.getBoundingClientRect();
+  const m=document.createElement('div');m.id='mp-dlmenu';
+  m.style.cssText='position:fixed;z-index:95;min-width:200px;background:#0a0f1e;border:1px solid #243050;border-radius:12px;padding:.35rem;box-shadow:0 12px 30px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:.25rem;top:'+(r.bottom+6)+'px;right:'+Math.max(8,window.innerWidth-r.right)+'px';
+  m.innerHTML='<button class="mp-btn" style="text-align:left" onclick="mpDlClose();mpResDownload()">📗 Excel (.xlsx)</button><button class="mp-btn" style="text-align:left" onclick="mpDlClose();mpPdfDownload()">📕 PDF</button>';
+  document.getElementById('mp-res').appendChild(m);
+  setTimeout(()=>document.addEventListener('click',mpDlClose,{once:true}),0);
+}
+
+/* ----- export PDF (même présentation que l'Excel, sans bibliothèque) ----- */
+const MP_HW=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+function mpPdfClean(t){return String(t).replace(/[^\x20-\x7E\u00A0-\u00FF\u2013\u2014\u2019\u2026]/g,'');}
+function mpPdfEsc(t){
+  const map={0x2013:0x96,0x2014:0x97,0x2019:0x92,0x2026:0x85};
+  let o='';
+  for(const ch of mpPdfClean(t)){
+    let c=ch.charCodeAt(0);if(map[c])c=map[c];
+    if(c===40||c===41||c===92)o+='\\'+ch;
+    else if(c>126||c<32)o+='\\'+c.toString(8).padStart(3,'0');
+    else o+=ch;
+  }
+  return o;
+}
+function mpPdfW(t,size,bold){
+  let w=0;
+  for(const ch of mpPdfClean(t)){const c=ch.charCodeAt(0);w+=(c>=32&&c<=126)?MP_HW[c-32]:(c>=192&&c<=222?640:556);}
+  return w*size/1000*(bold?1.06:1);
+}
+function mpPdfWrap(t,size,bold,maxw){
+  const words=mpPdfClean(t).split(' '),lines=[];let cur='';
+  words.forEach(w=>{
+    const test=cur?cur+' '+w:w;
+    if(mpPdfW(test,size,bold)<=maxw||!cur)cur=test;else{lines.push(cur);cur=w;}
+  });
+  if(cur)lines.push(cur);
+  return lines;
+}
+function mpPdfFit(t,size,bold,maxw){
+  t=mpPdfClean(t);
+  if(mpPdfW(t,size,bold)<=maxw)return t;
+  while(t.length>1&&mpPdfW(t+'...',size,bold)>maxw)t=t.slice(0,-1);
+  return t+'...';
+}
+function mpPdf(){
+  const PW=842,PH=595,M=20;
+  const rgb=h=>{h=h.replace('#','');return [0,2,4].map(i=>(parseInt(h.substr(i,2),16)/255).toFixed(3)).join(' ');};
+  const colW=[80,112,78,78,78,78,78,78,71,71];
+  const colX=[];let ax=M;colW.forEach(w=>{colX.push(ax);ax+=w;});
+  const ex=!!mp.exam;
+  const pages=[];let cmds=null,y=0;
+  const cell=(c0,c1,top,h,fill)=>{
+    const x=colX[c0],w=colX[c1]+colW[c1]-x;
+    cmds.push((fill?rgb(fill)+' rg ':'1 1 1 rg ')+x+' '+(PH-top-h)+' '+w+' '+h+' re f');
+    cmds.push('0.75 G 0.5 w '+x+' '+(PH-top-h)+' '+w+' '+h+' re S');
+  };
+  const text=(t,c0,c1,top,h,size,bold,color)=>{
+    const x=colX[c0],w=colX[c1]+colW[c1]-x;
+    const lines=mpPdfWrap(t,size,bold,w-8).slice(0,3);
+    const lh=size*1.2,start=top+h/2-(lines.length*lh)/2;
+    lines.forEach((ln,k)=>{
+      const tw=mpPdfW(ln,size,bold);
+      cmds.push('BT /'+(bold?'F2':'F1')+' '+size+' Tf '+rgb(color)+' rg '+(x+(w-tw)/2).toFixed(2)+' '+(PH-(start+k*lh+size*0.95)).toFixed(2)+' Td ('+mpPdfEsc(ln)+') Tj ET');
+    });
+  };
+  const header=()=>{
+    const h=32;
+    const names=['Joueur','État'];
+    MP_LEVELS.forEach(l=>names.push(l+' – note /20',l+' – temps'));
+    names.push('Total sorties de page','Total temps hors page');
+    names.forEach((n,i)=>{cell(i,i,y,h,'#1f2937');text(n,i,i,y,h,8,true,'#ffffff');});
+    y+=h;
+  };
+  const newPage=()=>{
+    cmds=[];pages.push(cmds);
+    cmds.push('BT /F2 16 Tf 0.07 0.09 0.15 rg '+M+' '+(PH-M-14)+' Td ('+mpPdfEsc('Résultats – partie '+mp.code)+') Tj ET');
+    const sub='Mode surveillé : '+(ex?'activé':'désactivé')+'   ·   généré le '+new Date().toLocaleString('fr-FR');
+    cmds.push('BT /F1 9 Tf 0.4 0.45 0.5 rg '+M+' '+(PH-M-30)+' Td ('+mpPdfEsc(sub)+') Tj ET');
+    y=M+42;header();
+  };
+  newPage();
+  const sortieTxt=n=>n+' sortie'+(n>1?'s':'')+' de page';
+  Object.values(mp.results).forEach(e=>{
+    const h1=ex?22:26,h2=ex?18:0,H=h1+h2;
+    if(y+H>PH-M)newPage();
+    const pal=MP_PAL[e.pi%MP_PAL.length],tint=mpTint(pal.bg),lv=e.levels||{};
+    let st=MP_LBL[e.state]||e.state;
+    if(e.state==='run')st+=' ('+e.level+')';
+    if(e.disc)st+=' - déconnecté';
+    cell(0,0,y,H,pal.bg);text(e.name,0,0,y,H,10,true,pal.fg);
+    cell(1,1,y,H,'#ffffff');text(st,1,1,y,H,8.5,false,'#1f2937');
+    MP_LEVELS.forEach((l,i)=>{
+      const c=2+i*2,d=lv[l];
+      if(d){
+        cell(c,c,y,h1,pal.bg);text(String(d.note),c,c,y,h1,10,true,pal.fg);
+        cell(c+1,c+1,y,h1,pal.bg);text(mpFmt(d.time),c+1,c+1,y,h1,10,true,pal.fg);
+        if(ex){
+          cell(c,c,y+h1,h2,tint);text(sortieTxt(d.exits||0),c,c,y+h1,h2,7.5,false,'#1f2937');
+          cell(c+1,c+1,y+h1,h2,tint);text(mpFmt(d.away||0)+' hors page',c+1,c+1,y+h1,h2,7.5,false,'#1f2937');
+        }
+      }else{
+        cell(c,c,y,h1,'#ffffff');cell(c+1,c+1,y,h1,'#ffffff');
+        if(ex){cell(c,c,y+h1,h2,'#ffffff');cell(c+1,c+1,y+h1,h2,'#ffffff');}
+      }
+    });
+    cell(8,8,y,H,'#ffffff');text(ex?String(e.exits||0):'—',8,8,y,H,10,true,'#1f2937');
+    cell(9,9,y,H,'#ffffff');text(ex?mpFmt(e.away||0):'—',9,9,y,H,10,true,'#1f2937');
+    y+=H;
+  });
+  /* assemblage du fichier PDF */
+  let out='%PDF-1.4\n';const offs=[];
+  const add=body=>{offs.push(out.length);out+=offs.length+' 0 obj\n'+body+'\nendobj\n';};
+  const kids=pages.map((_,k)=>(5+2*k)+' 0 R').join(' ');
+  add('<< /Type /Catalog /Pages 2 0 R >>');
+  add('<< /Type /Pages /Kids ['+kids+'] /Count '+pages.length+' >>');
+  add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  pages.forEach((cm,k)=>{
+    const content=cm.join('\n');
+    add('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PW+' '+PH+'] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents '+(6+2*k)+' 0 R >>');
+    add('<< /Length '+content.length+' >>\nstream\n'+content+'\nendstream');
+  });
+  const xr=out.length;
+  out+='xref\n0 '+(offs.length+1)+'\n0000000000 65535 f \n'+offs.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('');
+  out+='trailer\n<< /Size '+(offs.length+1)+' /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF';
+  const u8=new Uint8Array(out.length);for(let i=0;i<out.length;i++)u8[i]=out.charCodeAt(i)&255;
+  return new Blob([u8],{type:'application/pdf'});
+}
+function mpPdfDownload(){
+  try{
+    const blob=mpPdf(),a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download='resultats-'+(mp.code||'partie')+'.pdf';
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+  }catch(e){mpToast('Téléchargement impossible : '+e.message);}
+}
+
+/* ----- expulsion d'un joueur (avec confirmation) ----- */
+function mpConfirmClose(){const o=document.getElementById('mp-confirm');if(o)o.remove();}
+function mpAskKick(id){
+  if(mp.role!=='host')return;
+  const c=mp.conns.find(x=>x.peer===id),e=mp.results[id];
+  const name=c?c._name:(e?e.name:'ce joueur');
+  const res=document.getElementById('mp-res');
+  const host=(res&&res.classList.contains('show'))?res:document.getElementById('mp-modal');
+  mpConfirmClose();
+  const o=document.createElement('div');o.id='mp-confirm';
+  o.style.cssText='position:fixed;inset:0;z-index:96;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(3,6,14,.75)';
+  o.innerHTML='<div class="mp-box"><div class="mp-title">🗑 Supprimer ce joueur ?</div><div class="mp-txt">Voulez-vous vraiment supprimer ce joueur ?<br><b style="color:#ffb020;font-size:.95rem">'+mpEsc(name)+'</b><br>Il sera expulsé immédiatement de la partie.</div><div class="mp-row"><button class="mp-btn" onclick="mpConfirmClose()">Annuler</button><button class="mp-btn main" onclick="mpKick(\''+mpEsc(id)+'\');mpConfirmClose()">🗑 Oui, supprimer</button></div></div>';
+  host.appendChild(o);
+}
+function mpKick(id){
+  if(mp.role!=='host')return;
+  const c=mp.conns.find(x=>x.peer===id);
+  const name=c?c._name:((mp.results[id]||{}).name||'');
+  if(name)mp.kicked[name.toLowerCase()]=1;
+  if(c){
+    try{c.send({t:'kick'});}catch(e){}
+    mp.conns=mp.conns.filter(x=>x!==c);
+    setTimeout(()=>{try{c.close();}catch(e){}},300);
+  }
+  delete mp.results[id];
+  mpBroadcastPlayers();
+  mpRenderRes();
+}
+function mpKicked(){
+  const n=mp.name;mpClean();mp.name=n;
+  try{goHome();}catch(e){}
+  document.getElementById('mp-modal').classList.add('show');
+  mpMenu('Tu as été expulsé de la partie par le créateur.');
+}
+
 /* ----- CRÉER ----- */
 function mpCreate(tries){
   if(typeof Peer==='undefined'){mpErr("Connexion impossible : vérifie ta connexion internet.");return;}
@@ -630,6 +816,7 @@ function mpCreate(tries){
       if(!d)return;
       if(d.t==='hello'){
         conn._name=String(d.name||'Joueur').slice(0,16);
+        if(mp.kicked[conn._name.toLowerCase()]){try{conn.send({t:'kick'});}catch(x){}setTimeout(()=>{try{conn.close();}catch(x){}},300);return;}
         if(mp.conns.indexOf(conn)<0)mp.conns.push(conn);
         const e=mpEntry(conn);e.name=conn._name;e.disc=false;
         if(mp.started){try{conn.send({t:'start',exam:!!mp.exam});}catch(x){}}
@@ -658,7 +845,7 @@ function mpHostLobby(){
     <div class="mp-txt">Donne ce code à tes amis (clique dessus pour le copier) :</div>
     <div class="mp-code" onclick="mpCopy()" id="mp-code">${mp.code}</div>
     <div class="mp-txt">Joueurs connectés (${mp.players.length}) :</div>
-    <div class="mp-players">${mp.players.map((n,i)=>`<div class="mp-player">${i===0?'👑 ':'🧑 '}${mpEsc(n)}</div>`).join('')}</div>
+    <div class="mp-players">${mp.players.map((n,i)=>{const c=i>0?mp.conns[i-1]:null;return `<div class="mp-player has-kick"${c?` oncontextmenu="event.preventDefault();mpAskKick('${mpEsc(c.peer)}')"`:''}><span>${i===0?'👑 ':'🧑 '}${mpEsc(n)}</span>${c?`<button class="mp-kick" title="Expulser ce joueur" onclick="mpAskKick('${mpEsc(c.peer)}')">🗑</button>`:''}</div>`;}).join('')}</div>
     <label class="mp-chk"><input type="checkbox" ${mp.exam?'checked':''} onchange="mp.exam=this.checked"><div>🔒 Mode surveillé <span>— les joueurs ne peuvent pas quitter le Quiz avant d'avoir fini, et chaque sortie de la page est comptée.</span></div></label>
     <button class="mp-btn main" onclick="mpStart()">▶ Lancer le Quiz pour tout le monde</button>
     <button class="mp-btn" onclick="mpClose()">Annuler la partie</button>`);
@@ -708,6 +895,7 @@ function mpJoin(){
       if(!d)return;
       if(d.t==='players'){mp.players=d.list||[];mpGuestLobby();}
       else if(d.t==='start'){mpGuestStart(!!d.exam);}
+      else if(d.t==='kick'){mpKicked();}
     });
     conn.on('close',()=>{
       if(mp.hostConn!==conn)return;
