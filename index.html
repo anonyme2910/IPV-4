@@ -125,8 +125,8 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-split{display:flex}
 .mp-tools .mp-split .mp-btn:first-child{border-radius:12px 0 0 12px}
 .mp-tools .mp-split .mp-arrow{border-radius:0 12px 12px 0;border-left:1px solid #6b4a00;padding:.55rem .65rem}
-.mp-kick{background:none;border:0;cursor:pointer;font-size:.9rem;opacity:.55;margin-left:.5rem;padding:.15rem .35rem;border-radius:6px;line-height:1}
-.mp-kick:hover{opacity:1;background:rgba(255,80,80,.2)}
+.mp-kick{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;margin-left:.6rem;padding:0;border:1px solid #ff6b6b;border-radius:8px;background:rgba(255,80,80,.14);color:#ff8a8a;cursor:pointer;vertical-align:middle}
+.mp-kick:hover{background:#ff5050;color:#fff}
 .mp-player.has-kick{display:flex;align-items:center;justify-content:space-between}
 </style>
 </head>
@@ -458,7 +458,7 @@ function mpRenderRes(){
     if(e.state==='run')st+=' ('+e.level+')';
     if(e.disc)st+=' ⚠ déconnecté';
     const cs=(txt,bg,fg)=>`<td><span class="mp-cell" style="background:${bg};color:${fg}">${mpEsc(txt)}</span></td>`;
-    let r1=`<tr><td rowspan="${rs}" oncontextmenu="event.preventDefault();mpAskKick('${mpEsc(e.id)}')"><span class="mp-dot" style="background:${pal.bg}"></span><b>${mpEsc(e.name)}</b><button class="mp-kick" title="Expulser ce joueur" onclick="mpAskKick('${mpEsc(e.id)}')">🗑</button></td><td rowspan="${rs}">${mpEsc(st)}</td>`;
+    let r1=`<tr><td rowspan="${rs}" oncontextmenu="event.preventDefault();mpAskKick('${mpEsc(e.id)}')"><span class="mp-dot" style="background:${pal.bg}"></span><b>${mpEsc(e.name)}</b><button class="mp-kick" title="Expulser ce joueur" onclick="mpAskKick('${mpEsc(e.id)}')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg></button></td><td rowspan="${rs}">${mpEsc(st)}</td>`;
     let r2='<tr>';
     MP_LEVELS.forEach(l=>{
       const d=lv[l];
@@ -845,7 +845,7 @@ function mpHostLobby(){
     <div class="mp-txt">Donne ce code à tes amis (clique dessus pour le copier) :</div>
     <div class="mp-code" onclick="mpCopy()" id="mp-code">${mp.code}</div>
     <div class="mp-txt">Joueurs connectés (${mp.players.length}) :</div>
-    <div class="mp-players">${mp.players.map((n,i)=>{const c=i>0?mp.conns[i-1]:null;return `<div class="mp-player has-kick"${c?` oncontextmenu="event.preventDefault();mpAskKick('${mpEsc(c.peer)}')"`:''}><span>${i===0?'👑 ':'🧑 '}${mpEsc(n)}</span>${c?`<button class="mp-kick" title="Expulser ce joueur" onclick="mpAskKick('${mpEsc(c.peer)}')">🗑</button>`:''}</div>`;}).join('')}</div>
+    <div class="mp-players">${mp.players.map((n,i)=>{const c=i>0?mp.conns[i-1]:null;return `<div class="mp-player has-kick"${c?` oncontextmenu="event.preventDefault();mpAskKick('${mpEsc(c.peer)}')"`:''}><span>${i===0?'👑 ':'🧑 '}${mpEsc(n)}</span>${c?`<button class="mp-kick" title="Expulser ce joueur" onclick="mpAskKick('${mpEsc(c.peer)}')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg></button>`:''}</div>`;}).join('')}</div>
     <label class="mp-chk"><input type="checkbox" ${mp.exam?'checked':''} onchange="mp.exam=this.checked"><div>🔒 Mode surveillé <span>— les joueurs ne peuvent pas quitter le Quiz avant d'avoir fini, et chaque sortie de la page est comptée.</span></div></label>
     <button class="mp-btn main" onclick="mpStart()">▶ Lancer le Quiz pour tout le monde</button>
     <button class="mp-btn" onclick="mpClose()">Annuler la partie</button>`);
