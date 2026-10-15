@@ -1,0 +1,2301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPv4 — Adressage par Classes</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── THEME VARS ── */
+:root {
+  --bg:#050810; --bg2:#0a0f1e; --bg3:#0f1627;
+  --border:#1a2540; --border2:#243050;
+  --text:#e8f0ff; --text-dim:#8aabcc;
+  --accent:#00d4ff; --accent2:#0088cc;
+  --green:#00ff9d; --yellow:#ffcc00;
+  --red:#ff4466; --purple:#a855f7;
+  --orange:#ff9f40;
+  --glow:0 0 20px rgba(0,212,255,0.3);
+  /* NET/HOST colors */
+  --net-bg:rgba(0,136,204,.22); --net-col:#60c8ff; --net-border:rgba(0,136,204,.4);
+  --host-bg:rgba(0,255,157,.14); --host-col:#00ff9d; --host-border:rgba(0,255,157,.3);
+  /* Private */
+  --priv-bg:rgba(255,159,64,.18); --priv-col:#ff9f40; --priv-border:rgba(255,159,64,.4);
+}
+
+body.light {
+  --bg:#f0f4ff; --bg2:#ffffff; --bg3:#e8eef8;
+  --border:#d0dcf0; --border2:#b8ccee;
+  --text:#0a1428; --text-dim:#5570a0;
+  --accent:#0077cc; --accent2:#0055aa;
+  --green:#008844; --yellow:#cc8800;
+  --red:#cc0033; --purple:#7722cc;
+  --orange:#cc5500;
+  --glow:0 0 20px rgba(0,119,204,0.2);
+  --net-bg:rgba(0,85,170,.15); --net-col:#0044aa; --net-border:rgba(0,85,170,.35);
+  --host-bg:rgba(0,136,68,.12); --host-col:#007744; --host-border:rgba(0,136,68,.3);
+  --priv-bg:rgba(204,85,0,.12); --priv-col:#994400; --priv-border:rgba(204,85,0,.35);
+}
+
+html { scroll-behavior:smooth; }
+
+body {
+  font-family:'JetBrains Mono',monospace;
+  background:var(--bg); color:var(--text);
+  min-height:100vh; overflow-x:hidden;
+  transition:background .3s, color .3s;
+}
+
+body:not(.light)::before {
+  content:''; position:fixed; inset:0;
+  background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);
+  background-size:40px 40px; pointer-events:none; z-index:0;
+}
+body:not(.light)::after {
+  content:''; position:fixed; inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);
+  pointer-events:none; z-index:0;
+}
+
+.wrapper { position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:2rem 1.5rem 5rem; }
+
+/* ── HEADER ── */
+header { text-align:center; padding:2rem 0 1.5rem; position:relative; }
+.header-tag { font-size:.65rem; letter-spacing:.3em; color:var(--accent); text-transform:uppercase; margin-bottom:.6rem; opacity:.8; }
+h1 { font-family:sans-serif; font-size:clamp(2rem,6vw,3rem); font-weight:800; letter-spacing:-.02em; color:#fff; }
+body.light h1 { color:var(--text); }
+h1 span { color:var(--accent); text-shadow:var(--glow); }
+.subtitle { font-size:.75rem; color:var(--text-dim); letter-spacing:.04em; margin-top:.4rem; }
+.header-line { width:80px; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); margin:1rem auto 0; }
+
+/* ── THEME TOGGLE ── */
+.theme-btn {
+  position:absolute; top:2rem; right:0;
+  background:var(--bg2); border:1px solid var(--border); border-radius:20px;
+  padding:.4rem .9rem; font-family:'JetBrains Mono',monospace; font-size:.68rem;
+  color:var(--text-dim); cursor:pointer; transition:all .2s;
+  display:flex; align-items:center; gap:.4rem;
+}
+.theme-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* ── CLASS SELECTOR (kept for active state in app) ── */
+.class-selector {
+  display:flex; gap:.75rem; justify-content:center;
+  margin:1.5rem 0; flex-wrap:wrap;
+}
+.class-btn {
+  font-family:sans-serif; font-size:1.1rem; font-weight:800;
+  padding:.8rem 2.5rem; border:2px solid var(--border); border-radius:12px;
+  background:var(--bg2); color:var(--text-dim); cursor:pointer;
+  transition:all .25s; letter-spacing:.04em; position:relative; overflow:hidden;
+  min-width:160px;
+}
+.class-btn::before {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(135deg, var(--cbtn-a), var(--cbtn-b));
+  opacity:0; transition:opacity .25s;
+}
+.class-btn span { position:relative; z-index:1; }
+.class-btn:hover { border-color:var(--cbtn-b,var(--accent)); color:var(--text); transform:translateY(-2px); }
+.class-btn:hover::before { opacity:.08; }
+.class-btn.active { border-color:var(--cbtn-b); color:#fff; transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.3); }
+body.light .class-btn.active { color:var(--text); }
+.class-btn.active::before { opacity:1; }
+
+.cbtn-a { --cbtn-a:#8f0f26; --cbtn-b:#d11a38; }
+.cbtn-b { --cbtn-a:#106b2c; --cbtn-b:#1fa84a; }
+.cbtn-c { --cbtn-a:#143f85; --cbtn-b:#2478d6; }
+
+.class-badge { font-size:.55rem; display:block; font-weight:400; letter-spacing:.1em; margin-top:.2rem; opacity:.8; }
+
+/* ── LANDING SCREEN ── */
+#landing {
+  position:fixed; inset:0; z-index:100;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:var(--bg);
+  transition:opacity .55s ease, transform .55s ease;
+  overflow:hidden;
+}
+#landing.hidden {
+  opacity:0; transform:translateY(-24px); pointer-events:none;
+}
+#landing canvas {
+  position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
+}
+
+.landing-inner {
+  position:relative; z-index:2;
+  display:flex; flex-direction:column; align-items:center;
+  gap:2.5rem; padding:2rem 1.5rem; width:100%; max-width:1060px;
+}
+
+.landing-hero { text-align:center; }
+.landing-tag {
+  font-size:.6rem; letter-spacing:.4em; color:var(--accent);
+  text-transform:uppercase; margin-bottom:.75rem; opacity:0;
+  animation:fadeUp .6s .1s ease forwards;
+}
+.landing-title {
+  font-family:sans-serif; font-size:clamp(3rem,9vw,5.5rem);
+  font-weight:800; letter-spacing:-.03em; line-height:.95;
+  color:#fff; opacity:0; animation:fadeUp .6s .25s ease forwards;
+}
+body.light .landing-title { color:var(--text); }
+.landing-title .accent-word { color:#ffd23f; text-shadow:0 0 40px rgba(255,210,63,.5); }
+body.light .landing-title .accent-word { color:#cc8800; text-shadow:0 0 40px rgba(204,136,0,.3); }
+.landing-title .dim-word { color:var(--text-dim); font-weight:300; }
+.landing-sub {
+  font-size:.78rem; color:var(--text-dim); letter-spacing:.05em;
+  margin-top:.9rem; opacity:0; animation:fadeUp .6s .4s ease forwards;
+}
+.landing-line {
+  width:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  margin:.75rem auto 0; opacity:0;
+  animation:lineGrow .8s .6s ease forwards;
+}
+@keyframes lineGrow { to { width:120px; opacity:.7; } }
+
+/* ── CLASS CARDS ── */
+.class-cards {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem;
+  width:100%; opacity:0; animation:fadeUp .6s .55s ease forwards;
+}
+@media(max-width:680px){ .class-cards { grid-template-columns:1fr; } }
+
+.class-card {
+  position:relative; border-radius:16px; overflow:hidden;
+  border:1px solid var(--border); background:var(--bg2);
+  cursor:pointer; transition:transform .3s, border-color .3s, box-shadow .3s;
+  padding:1.75rem 1.5rem 1.5rem;
+  display:flex; flex-direction:column; gap:.55rem;
+}
+.class-card::before {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(135deg, var(--cc-a), var(--cc-b));
+  opacity:.06; transition:opacity .3s;
+}
+.class-card::after {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(90deg,transparent,var(--cc-b),transparent);
+  opacity:.8;
+}
+.class-card:hover {
+  transform:translateY(-7px);
+  border-color:var(--cc-b);
+  box-shadow:0 24px 55px rgba(0,0,0,.5), 0 0 35px var(--cc-glow);
+}
+.class-card:hover::before { opacity:.14; }
+
+.cc-a { --cc-a:#8f0f26; --cc-b:#d11a38; --cc-glow:rgba(209,26,56,.3); }
+.cc-b { --cc-a:#106b2c; --cc-b:#1fa84a; --cc-glow:rgba(31,168,74,.3); }
+.cc-c { --cc-a:#143f85; --cc-b:#2478d6; --cc-glow:rgba(36,120,214,.3); }
+
+.cc-letter {
+  font-family:sans-serif; font-size:4rem; font-weight:900;
+  line-height:1; color:var(--cc-b);
+  text-shadow:0 0 40px var(--cc-glow);
+  position:relative; z-index:1;
+  transition:transform .3s, text-shadow .3s;
+}
+.class-card:hover .cc-letter {
+  transform:scale(1.1);
+  text-shadow:0 0 60px var(--cc-glow), 0 0 100px var(--cc-glow);
+}
+
+.cc-title {
+  font-family:sans-serif; font-size:.6rem; font-weight:700;
+  letter-spacing:.22em; text-transform:uppercase;
+  color:var(--text-dim); position:relative; z-index:1;
+}
+.cc-range {
+  font-family:'JetBrains Mono',monospace; font-size:.68rem; font-weight:600;
+  color:var(--text); opacity:.65; position:relative; z-index:1;
+  background:rgba(0,0,0,.2); border-radius:6px; padding:.3rem .6rem;
+  border:1px solid var(--border); display:inline-block;
+}
+body.light .cc-range { background:rgba(0,0,0,.05); }
+
+.cc-stats {
+  display:flex; flex-direction:column; gap:.35rem;
+  margin-top:.3rem; position:relative; z-index:1;
+}
+.cc-stat {
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:.58rem; color:var(--text-dim);
+}
+.cc-stat-val {
+  font-family:'JetBrains Mono',monospace; font-weight:700;
+  color:var(--cc-b); font-size:.6rem;
+}
+.cc-divider {
+  height:1px; background:var(--border); margin:.3rem 0;
+  position:relative; z-index:1;
+}
+.cc-mask-row {
+  display:flex; align-items:center; justify-content:space-between;
+  position:relative; z-index:1;
+}
+.cc-mask-label { font-size:.52rem; letter-spacing:.14em; color:var(--text-dim); text-transform:uppercase; }
+.cc-mask-val {
+  font-family:'JetBrains Mono',monospace; font-weight:700;
+  font-size:.9rem; color:var(--cc-b);
+}
+
+/* Bottom glow sweep on hover */
+.cc-sweep {
+  position:absolute; bottom:0; left:-100%; width:100%; height:1px;
+  background:linear-gradient(90deg,transparent,var(--cc-b),transparent);
+  transition:left .4s ease;
+}
+.class-card:hover .cc-sweep { left:0; }
+
+/* Landing hint */
+.landing-hint {
+  font-size:.58rem; letter-spacing:.16em; color:var(--text-dim); opacity:0;
+  animation:fadeUp .6s .75s ease forwards; text-align:center;
+}
+.landing-hint span { color:var(--accent); }
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(14px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── PANEL ── */
+.panel {
+  background:var(--bg2); border:1px solid var(--border); border-radius:14px;
+  padding:1.5rem 1.75rem; position:relative; overflow:hidden; transition:border-color .3s;
+}
+.panel::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent2),transparent); opacity:.5;
+}
+.panel:hover { border-color:var(--border2); }
+.panel-title {
+  font-family:sans-serif; font-size:.68rem; font-weight:700;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--accent);
+  margin-bottom:1.25rem; display:flex; align-items:center; gap:.5rem;
+}
+.panel-title::before {
+  content:''; width:6px; height:6px; background:var(--accent);
+  border-radius:50%; box-shadow:0 0 8px var(--accent); flex-shrink:0;
+}
+
+/* ── MAIN APP (hidden until class selected) ── */
+#app { display:none; animation:fadeUp .35s ease; }
+#app.visible { display:block; }
+
+/* ── IP INPUT SECTION ── */
+.ip-section {
+  display:grid; grid-template-columns:1fr 2fr; gap:1.5rem;
+  margin-bottom:1.5rem; align-items:start;
+}
+@media(max-width:700px){ .ip-section{grid-template-columns:1fr;} }
+
+.ip-input-wrap { position:relative; }
+.ip-field {
+  width:100%; background:var(--bg3); border:1px solid var(--border);
+  border-radius:10px; padding:.85rem 1.1rem;
+  font-family:'JetBrains Mono',monospace; font-size:1.2rem; font-weight:600;
+  color:var(--text); outline:none; transition:border-color .2s, box-shadow .2s;
+  letter-spacing:.05em; text-align:center;
+}
+.ip-field:focus { border-color:var(--accent2); box-shadow:0 0 0 3px rgba(0,136,204,.15); }
+.ip-field.invalid { border-color:var(--red); box-shadow:0 0 0 3px rgba(255,68,102,.1); }
+
+.ip-display-big {
+  font-family:sans-serif; font-size:clamp(1.6rem,4vw,2.8rem);
+  font-weight:800; text-align:center; letter-spacing:-.01em; line-height:1;
+  padding:1rem; background:var(--bg3); border-radius:10px;
+  border:1px solid var(--border); transition:all .2s;
+}
+.ip-display-big .oct { color:var(--text); display:inline; transition:color .2s; }
+.ip-display-big .sep { color:var(--text-dim); }
+.ip-display-big.is-private .oct { color:var(--priv-col); }
+
+/* ── SLIDER ── */
+.slider-wrap { margin-top:1rem; }
+.slider-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.6rem; }
+.slider-label { font-size:.6rem; letter-spacing:.15em; color:var(--text-dim); text-transform:uppercase; }
+.slider-val { font-family:sans-serif; font-size:.85rem; font-weight:800; color:var(--yellow); }
+
+.ip-range {
+  -webkit-appearance:none; appearance:none;
+  width:100%; height:7px; border-radius:4px; outline:none; border:none; cursor:pointer;
+  background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--fill,0%),var(--border2) var(--fill,0%),var(--border2) 100%);
+  transition:background .05s;
+}
+.ip-range::-webkit-slider-thumb {
+  -webkit-appearance:none; width:22px; height:22px; border-radius:50%;
+  background:var(--yellow); box-shadow:0 0 14px rgba(247,208,96,.6);
+  cursor:pointer; border:2px solid rgba(255,255,255,.2);
+  transition:transform .1s;
+}
+.ip-range::-webkit-slider-thumb:hover { transform:scale(1.15); }
+.slider-ticks { display:flex; justify-content:space-between; margin-top:.35rem; font-size:.55rem; color:var(--text-dim); }
+
+/* Private badge on slider */
+.private-indicator {
+  display:inline-flex; align-items:center; gap:.4rem;
+  padding:.3rem .8rem; border-radius:20px;
+  background:var(--priv-bg); border:1px solid var(--priv-border);
+  color:var(--priv-col); font-size:.68rem; font-weight:700;
+  opacity:0; transform:translateY(4px); transition:all .3s;
+}
+.private-indicator.visible { opacity:1; transform:translateY(0); }
+.private-indicator::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--priv-col); animation:pulse 1.2s infinite; }
+
+/* ── BINARY DISPLAY ── */
+.binary-panel {
+  background:var(--bg2); border:1px solid var(--border); border-radius:14px;
+  padding:1.5rem 1.75rem; margin-bottom:1.5rem;
+}
+.binary-grid {
+  display:flex; gap:4px; flex-wrap:nowrap; margin-top:1rem;
+}
+@media(max-width:600px){
+  .binary-grid { flex-wrap:wrap; }
+  .octet-group { width:calc(50% - 4px); }
+}
+.octet-group {
+  flex:1; display:flex; flex-direction:column; gap:3px;
+  background:var(--bg3); border-radius:10px; padding:.5rem;
+  border:1px solid var(--border);
+}
+.octet-dec {
+  text-align:center; font-size:.7rem; font-weight:600;
+  color:var(--text); padding:.2rem .4rem;
+  background:var(--bg2); border-radius:5px; border:1px solid var(--border);
+  transition:color .2s;
+}
+.octet-bits { display:flex; gap:2px; }
+.bit {
+  flex:1; height:38px; border-radius:6px; display:flex; align-items:center;
+  justify-content:center; font-size:.85rem; font-weight:700;
+  transition:background .15s, color .15s, transform .1s;
+  position:relative; cursor:default;
+}
+.bit.net { background:var(--net-bg); color:var(--net-col); box-shadow:inset 0 0 0 1px var(--net-border); }
+.bit.host { background:var(--host-bg); color:var(--host-col); box-shadow:inset 0 0 0 1px var(--host-border); }
+.bit.changed { animation:bitflash .18s ease; }
+
+/* ── FIXED CLASS BITS ── */
+/* Bit fixe à 0 → rouge (le bit "zéro" qui définit la classe) */
+.bit.fixed-zero {
+  background:rgba(255,50,80,.22) !important;
+  color:#ff4466 !important;
+  box-shadow:inset 0 0 0 2px rgba(255,50,80,.75), 0 0 12px rgba(255,50,80,.4) !important;
+  font-weight:900 !important;
+  cursor:not-allowed;
+}
+body.light .bit.fixed-zero {
+  background:rgba(220,0,40,.14) !important;
+  color:#cc0033 !important;
+  box-shadow:inset 0 0 0 2px rgba(220,0,40,.55) !important;
+}
+
+/* Bit fixe à 1 → vert/cyan selon classe */
+.bit.fixed-one {
+  background:rgba(0,255,157,.20) !important;
+  color:#00ff9d !important;
+  box-shadow:inset 0 0 0 2px rgba(0,255,157,.7), 0 0 12px rgba(0,255,157,.35) !important;
+  font-weight:900 !important;
+  cursor:not-allowed;
+}
+body.light .bit.fixed-one {
+  background:rgba(0,136,68,.14) !important;
+  color:#007744 !important;
+  box-shadow:inset 0 0 0 2px rgba(0,136,68,.55) !important;
+}
+
+/* Légende dot mise à jour */
+.bl-fixed-zero { background:rgba(255,50,80,.22); border:2px solid rgba(255,50,80,.75); box-shadow:0 0 6px rgba(255,50,80,.4); }
+.bl-fixed-one  { background:rgba(0,255,157,.20);  border:2px solid rgba(0,255,157,.7);  box-shadow:0 0 6px rgba(0,255,157,.35); }
+
+/* Legend dot for fixed bits */
+.bl-fixed { background:rgba(255,204,0,.22); border:2px solid rgba(255,204,0,.7); box-shadow:0 0 6px rgba(255,204,0,.4); }
+
+/* separator line between NET/HOST */
+.bit.separator::after {
+  content:''; position:absolute; left:-3px; top:4px; bottom:4px;
+  width:2px; background:var(--yellow); border-radius:1px;
+  box-shadow:0 0 8px var(--yellow);
+}
+
+/* octet separator (dots) */
+.octet-dot {
+  display:flex; align-items:center; color:var(--text-dim); font-size:1.1rem;
+  font-weight:700; padding:.2rem 0; margin-top:2rem;
+  flex-shrink:0;
+}
+
+/* ── LEGEND ── */
+.bits-legend {
+  display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.68rem;
+}
+.bl { display:flex; align-items:center; gap:.4rem; }
+.bl-dot { width:14px; height:14px; border-radius:4px; flex-shrink:0; }
+.bl-net { background:var(--net-bg); border:1px solid var(--net-border); }
+.bl-host { background:var(--host-bg); border:1px solid var(--host-border); }
+.bl-priv { background:var(--priv-bg); border:1px solid var(--priv-border); }
+
+/* ── STATS ROW ── */
+.stats-row {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:1rem; margin-bottom:1.5rem;
+}
+.stat-card {
+  background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+  padding:1.1rem 1.25rem; position:relative; overflow:hidden;
+}
+.stat-card::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
+  background:var(--sc-accent,var(--accent)); opacity:.7;
+}
+.stat-label { font-size:.58rem; letter-spacing:.13em; color:var(--text-dim); text-transform:uppercase; margin-bottom:.35rem; }
+.stat-value {
+  font-family:sans-serif; font-size:1.5rem; font-weight:800;
+  color:var(--sc-accent,var(--accent)); line-height:1.1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.stat-sub { font-size:.6rem; color:var(--text-dim); margin-top:.25rem; }
+.stat-formula { font-family:'JetBrains Mono',monospace; font-size:.7rem; color:var(--green); margin-top:.2rem; }
+.stat-formula.net-formula { color:var(--net-col); }
+
+/* ── PRIVATE ZONES PANEL ── */
+.private-panel {
+  background:var(--bg2); border:1px solid var(--border); border-radius:14px;
+  padding:1.5rem 1.75rem; margin-bottom:1.5rem;
+}
+.priv-zones { display:flex; flex-direction:column; gap:.6rem; margin-top:1rem; }
+.priv-zone {
+  display:flex; align-items:center; gap:.75rem;
+  padding:.75rem 1rem; border-radius:8px;
+  background:var(--bg3); border:1px solid var(--border);
+  transition:all .3s; position:relative; overflow:hidden;
+}
+.priv-zone::before {
+  content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:var(--border); transition:background .3s;
+}
+.priv-zone.highlighted {
+  border-color:var(--priv-border);
+  background:var(--priv-bg);
+  box-shadow:0 0 20px rgba(255,159,64,.15);
+}
+.priv-zone.highlighted::before { background:var(--priv-col); }
+.pz-name { font-size:.62rem; letter-spacing:.1em; color:var(--text-dim); text-transform:uppercase; flex-shrink:0; width:60px; }
+.pz-range {
+  font-family:'JetBrains Mono',monospace; font-size:.8rem; font-weight:600;
+  color:var(--text); transition:color .3s;
+}
+.priv-zone.highlighted .pz-range { color:var(--priv-col); }
+.pz-badge {
+  margin-left:auto; padding:.2rem .6rem; border-radius:10px;
+  font-size:.6rem; font-weight:700;
+  background:transparent; border:1px solid var(--border); color:var(--text-dim);
+  transition:all .3s; white-space:nowrap;
+}
+.priv-zone.highlighted .pz-badge {
+  background:var(--priv-bg); border-color:var(--priv-border); color:var(--priv-col);
+}
+
+/* Progress bar in private zone */
+.pz-progress {
+  position:absolute; left:3px; top:0; bottom:0;
+  background:var(--priv-bg); transition:right .1s; z-index:0; right:100%;
+}
+.priv-zone > * { position:relative; z-index:1; }
+
+/* ── IP TYPE badge ── */
+.ip-type-badge {
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.3rem .8rem; border-radius:20px;
+  font-size:.68rem; font-weight:700; letter-spacing:.04em;
+  transition:all .25s;
+}
+.ip-type-public { background:rgba(0,212,255,.1); border:1px solid rgba(0,212,255,.3); color:var(--accent); }
+.ip-type-private { background:var(--priv-bg); border:1px solid var(--priv-border); color:var(--priv-col); }
+
+/* ── CLASS RANGE VISUAL ── */
+.range-bar-wrap {
+  margin-top:1rem; background:var(--bg3); border-radius:8px; padding:.75rem 1rem;
+  border:1px solid var(--border);
+}
+.range-bar {
+  height:24px; border-radius:6px; background:var(--border);
+  position:relative; overflow:hidden; margin:.5rem 0;
+}
+.range-bar-fill {
+  height:100%; border-radius:6px;
+  background:linear-gradient(90deg,var(--cbtn-a2),var(--cbtn-b2));
+  position:absolute; left:0; top:0; transition:width .5s ease;
+}
+.range-bar-cursor {
+  position:absolute; top:0; bottom:0; width:3px;
+  background:var(--yellow); border-radius:1px;
+  box-shadow:0 0 8px var(--yellow); transition:left .1s;
+}
+.range-labels { display:flex; justify-content:space-between; font-size:.58rem; color:var(--text-dim); }
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+@keyframes bitflash { 0%{transform:scale(1.3);filter:brightness(1.5)} 100%{transform:scale(1);filter:brightness(1)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+@keyframes glow-in { from{box-shadow:0 0 0 rgba(255,159,64,0)} to{box-shadow:0 0 20px rgba(255,159,64,.2)} }
+
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+
+/* ═══════════════════════════════════════════════════════════
+   INTÉRIEUR DES CLASSES A / B / C — rouge · vert · bleu
+   (tout est limité à #app : rien d'autre dans la page ne change)
+═══════════════════════════════════════════════════════════ */
+#app{
+  --k:#e8334f; --k-hi:#ff8fa0; --k-lo:#8f0f26;
+  --k-bg:rgba(209,26,56,.18); --k-border:rgba(232,51,79,.5); --k-glow:rgba(232,51,79,.4);
+}
+#app[data-cls="B"]{
+  --k:#2fc25b; --k-hi:#86e6a4; --k-lo:#106b2c;
+  --k-bg:rgba(31,168,74,.16); --k-border:rgba(47,194,91,.5); --k-glow:rgba(47,194,91,.4);
+}
+#app[data-cls="C"]{
+  --k:#3b8ee8; --k-hi:#8cc2ff; --k-lo:#143f85;
+  --k-bg:rgba(36,120,214,.18); --k-border:rgba(59,142,232,.5); --k-glow:rgba(59,142,232,.4);
+}
+body.light #app{ --k:#b0102c; --k-hi:#8f0f26; --k-bg:rgba(176,16,44,.10); --k-border:rgba(176,16,44,.45); --k-glow:rgba(176,16,44,.25); }
+body.light #app[data-cls="B"]{ --k:#14803a; --k-hi:#0d5e2a; --k-bg:rgba(20,128,58,.10); --k-border:rgba(20,128,58,.45); --k-glow:rgba(20,128,58,.25); }
+body.light #app[data-cls="C"]{ --k:#1a5fb4; --k-hi:#123f85; --k-bg:rgba(26,95,180,.10); --k-border:rgba(26,95,180,.45); --k-glow:rgba(26,95,180,.25); }
+
+/* les couleurs de la page sont remplacées par celle de la classe, seulement ici */
+#app{
+  --accent:var(--k); --accent2:var(--k-lo);
+  --net-bg:var(--k-bg); --net-col:var(--k-hi); --net-border:var(--k-border);
+  --host-bg:rgba(138,171,204,.07); --host-col:var(--text-dim); --host-border:rgba(138,171,204,.22);
+  --green:var(--k); --yellow:var(--k-hi);
+  --priv-bg:var(--k-bg); --priv-col:var(--k-hi); --priv-border:var(--k-border);
+  --cbtn-a2:var(--k-lo); --cbtn-b2:var(--k);
+}
+
+/* bandeau de classe */
+#app .k-hero{
+  display:flex; align-items:center; gap:1.5rem; padding:1.1rem 1.6rem; margin-bottom:1.5rem;
+  border-radius:14px; border:1px solid var(--k-border); position:relative; overflow:hidden;
+  background:linear-gradient(110deg,var(--k-bg),transparent 65%),var(--bg2);
+}
+#app .k-hero::before{content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--k),transparent);}
+#app .k-letter{font-family:sans-serif; font-weight:900; font-size:4.6rem; line-height:1; color:var(--k); text-shadow:0 0 40px var(--k-glow); min-width:3.2rem; text-align:center;}
+#app[data-cls="A"] .k-letter::before{content:"A"}
+#app[data-cls="B"] .k-letter::before{content:"B"}
+#app[data-cls="C"] .k-letter::before{content:"C"}
+#app .k-title{font-family:sans-serif; font-weight:800; font-size:1.5rem; letter-spacing:.04em; color:var(--text); margin-bottom:.35rem;}
+#app .k-rule{display:none; font-size:.72rem; color:var(--text-dim);}
+#app .k-rule b{color:var(--k); font-weight:700;}
+#app[data-cls="A"] .k-rule-A, #app[data-cls="B"] .k-rule-B, #app[data-cls="C"] .k-rule-C{display:block}
+
+/* adresse à gauche, chiffres à droite */
+#app .k-top{display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:1.5rem; margin-bottom:1.5rem; align-items:stretch;}
+#app .k-main{display:flex; flex-direction:column; gap:.9rem;}
+#app .k-main .panel-title{margin-bottom:0}
+#app .k-iprow{display:flex; gap:.75rem; align-items:center;}
+#app .k-iprow .ip-field{flex:1; min-width:0}
+#app .k-main .slider-wrap, #app .k-main .range-bar-wrap{margin-top:0}
+#app .k-main .private-indicator{align-self:flex-start}
+#app .k-stats{display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:0; align-content:stretch;}
+#app .k-stats .stat-card{display:flex; flex-direction:column; justify-content:center;}
+#app .k-stats .stat-value{font-size:1.3rem}
+@media(max-width:860px){ #app .k-top{grid-template-columns:1fr} }
+
+/* binaire : 4 couleurs dédiées (hors rouge/vert/bleu), identiques pour A, B et C */
+#app{
+  --b-net:#b57bff;   --b-net-bg:rgba(168,85,247,.22);  --b-net-bd:rgba(168,85,247,.65);
+  --b-host:#ffa24a;  --b-host-bg:rgba(255,159,64,.16); --b-host-bd:rgba(255,159,64,.55);
+  --b-fixed:#ffd23f; --b-fixed-ink:#2a1f00;
+  --b-sep:#ffffff;
+}
+body.light #app{
+  --b-net:#6a1fc2;   --b-net-bg:rgba(119,34,204,.14);  --b-net-bd:rgba(119,34,204,.5);
+  --b-host:#b34700;  --b-host-bg:rgba(204,85,0,.12);   --b-host-bd:rgba(204,85,0,.5);
+  --b-fixed:#e0a400; --b-fixed-ink:#2a1f00;
+  --b-sep:#0a1428;
+}
+#app .bit.net{background:var(--b-net-bg); color:var(--b-net); box-shadow:inset 0 0 0 1px var(--b-net-bd);}
+#app .bit.host{background:var(--b-host-bg); color:var(--b-host); box-shadow:inset 0 0 0 1px var(--b-host-bd);}
+#app .bit.fixed-zero, #app .bit.fixed-one{
+  background:var(--b-fixed) !important; color:var(--b-fixed-ink) !important;
+  box-shadow:0 0 14px rgba(255,210,63,.45), inset 0 0 0 1px rgba(255,255,255,.4) !important;
+  font-weight:900 !important;
+}
+#app .bit.separator::after{background:var(--b-sep); box-shadow:0 0 8px var(--b-sep);}
+#app .k-lg-net{background:var(--b-net-bg); border:1px solid var(--b-net-bd)}
+#app .k-lg-host{background:var(--b-host-bg); border:1px solid var(--b-host-bd)}
+#app .k-lg-fixed{background:var(--b-fixed); box-shadow:0 0 6px rgba(255,210,63,.45)}
+#app .k-lg-sep{background:var(--b-sep); width:4px !important; border-radius:2px; margin:0 5px; box-shadow:0 0 6px var(--b-sep)}
+#app .k-lt-net{color:var(--b-net)} #app .k-lt-host{color:var(--b-host)}
+#app .k-lt-fixed{color:var(--b-fixed)} #app .k-lt-sep{color:var(--b-sep)}
+
+/* plages privées : adresse + curseur côte à côte */
+#app .private-panel{display:grid; grid-template-columns:auto 1fr; gap:.75rem 1rem; align-items:stretch;}
+#app .private-panel > .panel-title{grid-column:1/-1; margin-bottom:.15rem}
+#app #priv-shortcut-btn{margin:0 !important; text-align:left}
+#app #priv-slider-wrap{margin:0 !important}
+#app .priv-zones{grid-column:1/-1; margin-top:.15rem}
+@media(max-width:760px){ #app .private-panel{grid-template-columns:1fr} }
+
+/* IP : NET et HOST colorés comme dans le binaire (A, B et C) */
+#app .ip-display-big .oct.o-net, #app .ip-display-big.is-private .oct.o-net{color:var(--b-net)}
+#app .ip-display-big .oct.o-host, #app .ip-display-big.is-private .oct.o-host{color:var(--b-host)}
+#app .ip-display-big .sep.s-net{color:var(--b-net); opacity:.75}
+#app .ip-display-big .sep.s-host{color:var(--b-host); opacity:.75}
+#app .octet-dec.o-net{color:var(--b-net)}
+#app .octet-dec.o-host{color:var(--b-host)}
+
+/* IP colorées partout (NET violet / HOST orange) */
+#app .ipn{color:var(--b-net)} #app .iph{color:var(--b-host)}
+#app .ipnd{color:var(--b-net); opacity:.75} #app .iphd{color:var(--b-host); opacity:.75}
+#app .ip-field{color:transparent; caret-color:var(--text)}
+#app .ip-colored{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  pointer-events:none; overflow:hidden; white-space:pre;
+  font-family:'JetBrains Mono',monospace; font-size:1.2rem; font-weight:600; letter-spacing:.05em}
+#app{--c-tot:#22d3ee}
+body.light #app{--c-tot:#0e7490}
+
+/* Cartes de chiffres : noms roses · formules cyan · grands nombres jaunes (A, B, C identiques) */
+#app{--c-lab:#ff5cc0; --c-num:#ffd60a}
+body.light #app{--c-lab:#c2185b; --c-num:#a67c00}
+#app .k-stats .stat-label{color:var(--c-lab); font-size:1rem; font-weight:700; letter-spacing:.05em; margin-bottom:.5rem}
+#app .k-stats .stat-value{color:var(--c-num)}
+#app .k-stats .stat-formula, #app .k-stats .stat-sub{color:var(--c-tot); font-size:1rem; margin-top:.3rem}
+#app #stat-formula, #app #stat-mask-dec{color:var(--c-tot)}
+
+/* En-tête du cours : couleur de la classe choisie (A rouge · B vert · C bleu) */
+body[data-cls='A']{--hk:#e8334f; --hk-hi:#ff8fa0; --hk-glow:rgba(232,51,79,.45)}
+body[data-cls='B']{--hk:#2fc25b; --hk-hi:#86e6a4; --hk-glow:rgba(47,194,91,.45)}
+body[data-cls='C']{--hk:#3b8ee8; --hk-hi:#8cc2ff; --hk-glow:rgba(59,142,232,.45)}
+body.light[data-cls='A']{--hk:#b0102c; --hk-hi:#b0102c; --hk-glow:rgba(176,16,44,.25)}
+body.light[data-cls='B']{--hk:#14803a; --hk-hi:#14803a; --hk-glow:rgba(20,128,58,.25)}
+body.light[data-cls='C']{--hk:#1a5fb4; --hk-hi:#1a5fb4; --hk-glow:rgba(26,95,180,.25)}
+body[data-cls] header .header-tag{color:var(--hk); opacity:1}
+body[data-cls] header h1{color:var(--hk-hi)}
+body[data-cls] header h1 span{color:var(--hk); text-shadow:0 0 20px var(--hk-glow)}
+body[data-cls] header .subtitle{color:var(--hk)}
+body[data-cls] header .header-line{background:linear-gradient(90deg,transparent,var(--hk),transparent)}
+header .subtitle .hk-a, header .subtitle .hk-b, header .subtitle .hk-c{font-weight:800}
+header .subtitle .hk-a{color:#e8334f} header .subtitle .hk-b{color:#2fc25b} header .subtitle .hk-c{color:#3b8ee8}
+body.light header .subtitle .hk-a{color:#b0102c} body.light header .subtitle .hk-b{color:#14803a} body.light header .subtitle .hk-c{color:#1a5fb4}
+</style>
+</head>
+<body>
+
+<!-- ══ LANDING SCREEN ══ -->
+<div id="landing">
+  <canvas id="landing-canvas"></canvas>
+
+  <div class="landing-inner">
+    <div class="landing-hero">
+      <p class="landing-tag">Visualiseur interactif · Réseaux IPv4</p>
+      <h1 class="landing-title">
+        Classes d'adresses<br><span class="accent-word">IPV4</span>
+      </h1>
+      <p class="landing-sub">Adressage classful · <span style="color:#d11a38">A</span> &nbsp;·&nbsp; <span style="color:#1fa84a">B</span> &nbsp;·&nbsp; <span style="color:#2478d6">C</span></p>
+      <div class="landing-line"></div>
+    </div>
+
+    <div class="class-cards">
+
+      <!-- Classe A -->
+      <div class="class-card cc-a" onclick="launchClass('A')">
+        <div class="cc-letter">A</div>
+        <div class="cc-title">Classe A</div>
+        <div class="cc-range">1.0.0.0 → 127.255.255.255</div>
+        <div class="cc-stats">
+          <div class="cc-stat"><span>Bits NET</span><span class="cc-stat-val">8 bits</span></div>
+          <div class="cc-stat"><span>Bits HOST</span><span class="cc-stat-val">24 bits</span></div>
+          <div class="cc-stat"><span>Adresses/réseau</span><span class="cc-stat-val">16 777 216</span></div>
+          <div class="cc-stat"><span>Plage privée</span><span class="cc-stat-val">10.0.0.0/8</span></div>
+        </div>
+        <div class="cc-divider"></div>
+        <div class="cc-mask-row">
+          <span class="cc-mask-label">Masque par défaut</span>
+          <span class="cc-mask-val">/8</span>
+        </div>
+        <div class="cc-sweep"></div>
+      </div>
+
+      <!-- Classe B -->
+      <div class="class-card cc-b" onclick="launchClass('B')">
+        <div class="cc-letter">B</div>
+        <div class="cc-title">Classe B</div>
+        <div class="cc-range">128.0.0.0 → 191.255.255.255</div>
+        <div class="cc-stats">
+          <div class="cc-stat"><span>Bits NET</span><span class="cc-stat-val">16 bits</span></div>
+          <div class="cc-stat"><span>Bits HOST</span><span class="cc-stat-val">16 bits</span></div>
+          <div class="cc-stat"><span>Adresses/réseau</span><span class="cc-stat-val">65 536</span></div>
+          <div class="cc-stat"><span>Plage privée</span><span class="cc-stat-val">172.16.0.0/12</span></div>
+        </div>
+        <div class="cc-divider"></div>
+        <div class="cc-mask-row">
+          <span class="cc-mask-label">Masque par défaut</span>
+          <span class="cc-mask-val">/16</span>
+        </div>
+        <div class="cc-sweep"></div>
+      </div>
+
+      <!-- Classe C -->
+      <div class="class-card cc-c" onclick="launchClass('C')">
+        <div class="cc-letter">C</div>
+        <div class="cc-title">Classe C</div>
+        <div class="cc-range">192.0.0.0 → 223.255.255.255</div>
+        <div class="cc-stats">
+          <div class="cc-stat"><span>Bits NET</span><span class="cc-stat-val">24 bits</span></div>
+          <div class="cc-stat"><span>Bits HOST</span><span class="cc-stat-val">8 bits</span></div>
+          <div class="cc-stat"><span>Adresses/réseau</span><span class="cc-stat-val">256</span></div>
+          <div class="cc-stat"><span>Plage privée</span><span class="cc-stat-val">192.168.0.0/16</span></div>
+        </div>
+        <div class="cc-divider"></div>
+        <div class="cc-mask-row">
+          <span class="cc-mask-label">Masque par défaut</span>
+          <span class="cc-mask-val">/24</span>
+        </div>
+        <div class="cc-sweep"></div>
+      </div>
+
+    </div>
+
+    <p class="landing-hint">Cliquez sur une classe pour commencer l'exploration &nbsp;<span>↓</span></p>
+  </div>
+</div>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">
+      <span id="theme-icon">☀️</span> <span id="theme-label">Mode clair</span>
+    </button>
+    <p class="header-tag">Visualiseur interactif · Réseaux IPv4</p>
+    <h1>IPv4 <span>CLASSES</span></h1>
+    <p class="subtitle"><span class="hk-a">A</span> · <span class="hk-b">B</span> · <span class="hk-c">C</span> — Adressage classful</p>
+    <div class="header-line"></div>
+  </header>
+
+  <!-- CLASS SELECTOR -->
+  <div class="class-selector">
+    <button class="class-btn cbtn-a" onclick="selectClass('A')">
+      <span>CLASSE <strong>A</strong><small class="class-badge">1.0.0.0 → 127.255.255.255</small></span>
+    </button>
+    <button class="class-btn cbtn-b" onclick="selectClass('B')">
+      <span>CLASSE <strong>B</strong><small class="class-badge">128.0.0.0 → 191.255.255.255</small></span>
+    </button>
+    <button class="class-btn cbtn-c" onclick="selectClass('C')">
+      <span>CLASSE <strong>C</strong><small class="class-badge">192.0.0.0 → 223.255.255.255</small></span>
+    </button>
+  </div>
+
+  <!-- APP (shown after class selection) -->
+  <div id="app">
+
+    <!-- BANDEAU DE CLASSE -->
+    <div class="k-hero">
+      <div class="k-letter"></div>
+      <div class="k-hero-info">
+        <div class="k-title" id="class-label-title">Classe A</div>
+        <div class="k-rule k-rule-A">Le 1er bit est toujours <b>0</b></div>
+        <div class="k-rule k-rule-B">Les 2 premiers bits sont toujours <b>10</b></div>
+        <div class="k-rule k-rule-C">Les 3 premiers bits sont toujours <b>110</b></div>
+      </div>
+    </div>
+
+    <!-- ADRESSE + STATS -->
+    <div class="k-top">
+      <div class="panel k-main">
+        <div class="panel-title" id="slider-title">Plage de classe A</div>
+
+        <div class="k-iprow">
+          <div class="ip-input-wrap" style="flex:1;min-width:0"><input type="text" class="ip-field" id="ip-input"
+            placeholder="0.0.0.0" autocomplete="off" spellcheck="false"
+            oninput="onIPInput()" onkeydown="onIPKeydown(event)"><div class="ip-colored" id="ip-colored"></div></div>
+          <div id="ip-type-wrap">
+            <span class="ip-type-badge ip-type-public" id="ip-type-badge">PUBLIC</span>
+          </div>
+        </div>
+
+        <div class="private-indicator" id="priv-ind">🔒 Adresse privée</div>
+
+        <div class="ip-display-big" id="ip-display">
+          <span class="oct" id="o0">0</span><span class="sep">.</span><span class="oct" id="o1">0</span><span class="sep">.</span><span class="oct" id="o2">0</span><span class="sep">.</span><span class="oct" id="o3">0</span>
+        </div>
+
+        <div class="slider-wrap">
+          <div class="slider-header">
+            <span class="slider-label" id="slider-range-label">Position</span>
+            <span class="slider-val" id="slider-pos-val">—</span>
+          </div>
+          <input type="range" class="ip-range" id="ip-slider"
+            min="0" max="100" value="0" oninput="onSlider()">
+          <div class="slider-ticks">
+            <span id="tick-start">—</span>
+            <span id="tick-mid">—</span>
+            <span id="tick-end">—</span>
+          </div>
+        </div>
+
+        <!-- Class range bar -->
+        <div class="range-bar-wrap">
+          <div class="range-labels">
+            <span id="rb-start">—</span><span id="rb-end">—</span>
+          </div>
+          <div class="range-bar">
+            <div class="range-bar-fill" id="rb-fill" style="width:100%"></div>
+            <div class="range-bar-cursor" id="rb-cursor" style="left:0%"></div>
+          </div>
+          <div class="range-labels">
+            <span style="color:var(--text-dim)">Début classe</span>
+            <span style="color:var(--text-dim)">Fin classe</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATS -->
+      <div class="stats-row k-stats" id="stats-row">
+        <div class="stat-card" style="--sc-accent:var(--net-col)">
+          <div class="stat-label">Bits NET</div>
+          <div class="stat-value" id="stat-netbits">8</div>
+          <div class="stat-formula net-formula" id="stat-net-formula">2⁸ = 256 réseaux</div>
+        </div>
+        <div class="stat-card" style="--sc-accent:var(--host-col)">
+          <div class="stat-label">Bits HOST</div>
+          <div class="stat-value" id="stat-hostbits">24</div>
+          <div class="stat-formula" id="stat-host-formula">2²⁴ = 16 777 216</div>
+        </div>
+        <div class="stat-card" style="--sc-accent:var(--c-tot)">
+          <div class="stat-label">Adresses totales</div>
+          <div class="stat-value" id="stat-total">16 777 216</div>
+          <div class="stat-formula net-formula" id="stat-formula">2²⁴ = 16 777 216</div>
+        </div>
+        <div class="stat-card" style="--sc-accent:var(--yellow)">
+          <div class="stat-label">Masque par défaut</div>
+          <div class="stat-value" id="stat-mask">/8</div>
+          <div class="stat-sub" id="stat-mask-dec">255.0.0.0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BINARY DISPLAY -->
+    <div class="binary-panel">
+      <div class="panel-title">Représentation binaire — 32 bits</div>
+      <div class="binary-grid" id="binary-grid">
+        <!-- Generated by JS -->
+      </div>
+      <div class="bits-legend">
+        <div class="bl"><div class="bl-dot k-lg-net"></div><span class="k-lt-net">NET</span></div>
+        <div class="bl"><div class="bl-dot k-lg-host"></div><span class="k-lt-host">HOST</span></div>
+        <div class="bl"><div class="bl-dot k-lg-fixed"></div><span class="k-lt-fixed">Bits fixes de classe</span></div>
+        <div class="bl"><div class="bl-dot k-lg-sep"></div><span class="k-lt-sep">Frontière NET/HOST</span></div>
+      </div>
+    </div>
+
+    <!-- PRIVATE ZONES -->
+    <div class="private-panel">
+      <div class="panel-title" style="--accent:var(--priv-col)">🔒 Plages privées</div>
+      <button id="priv-shortcut-btn" onclick="goToPrivate()" style="
+        display:flex; align-items:center; gap:.5rem;
+        margin-bottom:.75rem; padding:.5rem 1rem;
+        background:var(--priv-bg); border:1px solid var(--priv-border);
+        border-radius:8px; color:var(--priv-col);
+        font-family:'JetBrains Mono',monospace; font-size:.75rem; font-weight:700;
+        cursor:pointer; transition:all .2s;
+      " onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">
+        🔒 Aller à la 1ère adresse privée — <span id="priv-shortcut-ip">—</span>
+      </button>
+
+      <!-- Curseur navigation adresses privées -->
+      <div id="priv-slider-wrap" style="
+        background:var(--bg3); border:1px solid var(--priv-border);
+        border-radius:10px; padding:.85rem 1rem; margin-bottom:.85rem;
+      ">
+        <div class="slider-header">
+          <span class="slider-label" style="color:var(--priv-col)">🔒 Navigation dans la plage privée</span>
+          <span class="slider-val" id="priv-slider-val" style="color:var(--priv-col)">—</span>
+        </div>
+        <input type="range" class="ip-range" id="priv-slider"
+          min="0" max="100" value="0" oninput="onPrivSlider()"
+          style="background:linear-gradient(to right,var(--priv-col) 0%,var(--priv-col) var(--fill,0%),var(--border2) var(--fill,0%),var(--border2) 100%);">
+        <div class="slider-ticks">
+          <span id="priv-tick-start">—</span>
+          <span id="priv-tick-end">—</span>
+        </div>
+      </div>
+
+      <div class="priv-zones" id="priv-zones">
+        <!-- Generated by JS -->
+      </div>
+    </div>
+
+  </div><!-- /app -->
+
+</div><!-- /wrapper -->
+
+<script>
+/* ═══════════════════════════════════════════
+   LANDING CANVAS — PARTICLES
+═══════════════════════════════════════════ */
+(function() {
+  const canvas = document.getElementById('landing-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [], animId;
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Palette: cyan, purple, green
+  const COLORS = ['rgba(0,212,255,', 'rgba(168,85,247,', 'rgba(0,255,157,'];
+
+  function Particle() {
+    this.reset = function() {
+      this.x = Math.random() * W;
+      this.y = Math.random() * H;
+      this.vx = (Math.random() - .5) * .4;
+      this.vy = (Math.random() - .5) * .4;
+      this.r = Math.random() * 1.8 + .5;
+      this.col = COLORS[Math.floor(Math.random() * COLORS.length)];
+      this.a = Math.random() * .5 + .1;
+    };
+    this.reset();
+  }
+
+  for (let i = 0; i < 90; i++) particles.push(new Particle());
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw connections
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 130) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          const alpha = (1 - dist / 130) * .12;
+          ctx.strokeStyle = `rgba(0,212,255,${alpha})`;
+          ctx.lineWidth = .5;
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw particles
+    for (const p of particles) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.col + p.a + ')';
+      ctx.fill();
+
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10) p.reset();
+    }
+
+    animId = requestAnimationFrame(draw);
+  }
+  draw();
+
+  window._stopLandingCanvas = function() {
+    cancelAnimationFrame(animId);
+  };
+  window._startLandingCanvas = function() {
+    cancelAnimationFrame(animId); resize(); draw();
+  };
+})();
+
+/* ═══════════════════════════════════════════
+   LAUNCH FROM LANDING
+═══════════════════════════════════════════ */
+function launchClass(cls) {
+  const landing = document.getElementById('landing');
+  landing.classList.add('hidden');
+  window._landingHideT = setTimeout(() => {
+    landing.style.display = 'none';
+    if (window._stopLandingCanvas) window._stopLandingCanvas();
+  }, 600);
+  selectClass(cls);
+  try { window.parent.setCoursLabel('Classes'); } catch(e) {}
+}
+
+/* Retour au choix des classes (appelé par le bouton ← de la page principale) */
+function showLanding() {
+  const landing = document.getElementById('landing');
+  clearTimeout(window._landingHideT);
+  landing.style.display = '';
+  void landing.offsetWidth;
+  landing.classList.remove('hidden');
+  if (window._startLandingCanvas) window._startLandingCanvas();
+  document.getElementById('app').classList.remove('visible');
+  document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('active'));
+  try { window.parent.setCoursLabel('Accueil'); } catch(e) {}
+}
+window.coursBack = function() {
+  const landing = document.getElementById('landing');
+  const onLanding = landing.style.display !== 'none' && !landing.classList.contains('hidden');
+  if (onLanding) return false;
+  showLanding();
+  return true;
+};
+
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+const STATE = {
+  cls: null,
+  ip: [0, 0, 0, 0],
+  prevBits: null,
+};
+
+/* ═══════════════════════════════════════════
+   CLASS CONFIG
+═══════════════════════════════════════════ */
+const CLASS_CFG = {
+  A: {
+    label: 'Classe A',
+    netBits: 7, hostBits: 24,
+    mask: '/8', maskDec: '255.0.0.0',
+    start: [1,0,0,0], end: [127,255,255,255],
+    startInt: ipToInt([1,0,0,0]), endInt: ipToInt([127,255,255,255]),
+    defaultIP: [10,0,0,0],
+    privRanges: [
+      { name: '10.x.x.x', start:[10,0,0,0], end:[10,255,255,255], label:'10.0.0.0 — 10.255.255.255' }
+    ],
+    accent: '#00d4ff',
+    accentA: '#0088cc', accentB: '#00d4ff',
+  },
+  B: {
+    label: 'Classe B',
+    netBits: 14, hostBits: 16,
+    mask: '/16', maskDec: '255.255.0.0',
+    start: [128,0,0,0], end: [191,255,255,255],
+    startInt: ipToInt([128,0,0,0]), endInt: ipToInt([191,255,255,255]),
+    defaultIP: [172,16,0,0],
+    privRanges: [
+      { name: '172.x.x.x', start:[172,16,0,0], end:[172,31,255,255], label:'172.16.0.0 — 172.31.255.255' }
+    ],
+    accent: '#a855f7',
+    accentA: '#7722cc', accentB: '#a855f7',
+  },
+  C: {
+    label: 'Classe C',
+    netBits: 21, hostBits: 8,
+    mask: '/24', maskDec: '255.255.255.0',
+    start: [192,0,0,0], end: [223,255,255,255],
+    startInt: ipToInt([192,0,0,0]), endInt: ipToInt([223,255,255,255]),
+    defaultIP: [192,168,1,0],
+    privRanges: [
+      { name: '192.168.x.x', start:[192,168,0,0], end:[192,168,255,255], label:'192.168.0.0 — 192.168.255.255' }
+    ],
+    accent: '#00ff9d',
+    accentA: '#22aa55', accentB: '#00ff9d',
+  },
+};
+
+/* ═══════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════ */
+function ipToInt(arr) {
+  return ((arr[0]<<24)|(arr[1]<<16)|(arr[2]<<8)|arr[3]) >>> 0;
+}
+function intToIp(n) {
+  return [(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255];
+}
+function ipStr(arr) { return arr.join('.'); }
+
+/* ── Couleurs NET / HOST sur toutes les IP (A:1 octet NET, B:2, C:3) ── */
+function ipSpans(parts) {
+  const nc = STATE.cls === 'B' ? 2 : STATE.cls === 'C' ? 3 : STATE.cls === 'A' ? 1 : 3;
+  return parts.map((v, i) => {
+    const t = String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const dot = i < parts.length - 1 ? `<span class=${i + 1 < nc ? 'ipnd' : 'iphd'}>.</span>` : '';
+    return `<span class=${i < nc ? 'ipn' : 'iph'}>${t}</span>${dot}`;
+  }).join('');
+}
+function ipc(str) {
+  return String(str).replace(/([0-9]+|x)([.]([0-9]+|x)){3}/gi, m => ipSpans(m.split('.')));
+}
+const IP_COLOR_SELECTORS = '#slider-range-label,#tick-start,#tick-mid,#tick-end,#rb-start,#rb-end,#priv-shortcut-ip,#priv-slider-val,#priv-tick-start,#priv-tick-end,#slider-pos-val,#priv-zones .pz-range,#priv-zones .pz-name,#priv-zones .pz-current';
+function colorIPs() {
+  document.querySelectorAll(IP_COLOR_SELECTORS).forEach(el => { el.innerHTML = ipc(el.textContent); });
+  const inp = document.getElementById('ip-input'), ov = document.getElementById('ip-colored');
+  if (inp && ov) ov.innerHTML = ipSpans(inp.value.split('.'));
+}
+document.addEventListener('input', e => { if (e.target && e.target.id === 'ip-input') colorIPs(); });
+function toBin8(n) { return n.toString(2).padStart(8,'0'); }
+
+function formatBig(n) {
+  return n.toLocaleString('fr-FR');
+}
+
+function superscript(n) {
+  const sup = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+  return String(n).split('').map(c=>sup[c]||c).join('');
+}
+
+/* ═══════════════════════════════════════════
+   CLASS SELECTION
+═══════════════════════════════════════════ */
+function selectClass(cls) {
+  STATE.cls = cls;
+  const cfg = CLASS_CFG[cls];
+  document.getElementById('app').dataset.cls = cls;
+  document.body.dataset.cls = cls;
+
+  // Update button styles
+  document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.class-btn')[['A','B','C'].indexOf(cls)].classList.add('active');
+
+  // Show app
+  const app = document.getElementById('app');
+  app.classList.add('visible');
+  app.style.animation = 'none';
+  void app.offsetWidth;
+  app.style.animation = 'fadeUp .35s ease';
+
+  // Update accent color for class
+  document.documentElement.style.setProperty('--cbtn-a2', cfg.accentA);
+  document.documentElement.style.setProperty('--cbtn-b2', cfg.accentB);
+
+  // Update labels
+  document.getElementById('class-label-title').textContent = cfg.label;
+  document.getElementById('slider-title').textContent = `Plage de classe ${cls}`;
+  document.getElementById('slider-range-label').textContent = `${ipStr(cfg.start)} → ${ipStr(cfg.end)}`;
+
+  // Tick labels
+  const midInt = Math.floor((cfg.startInt + cfg.endInt) / 2);
+  document.getElementById('tick-start').textContent = ipStr(cfg.start);
+  document.getElementById('tick-mid').textContent = ipStr(intToIp(midInt));
+  document.getElementById('tick-end').textContent = ipStr(cfg.end);
+  document.getElementById('rb-start').textContent = ipStr(cfg.start);
+  document.getElementById('rb-end').textContent = ipStr(cfg.end);
+
+  // Stats
+  document.getElementById('stat-netbits').textContent = cfg.netBits;
+  document.getElementById('stat-hostbits').textContent = cfg.hostBits;
+  const total = Math.pow(2, cfg.hostBits);
+  const totalNet = Math.pow(2, cfg.netBits);
+  document.getElementById('stat-total').textContent = formatBig(total);
+  document.getElementById('stat-formula').textContent = `2${superscript(cfg.hostBits)} = ${formatBig(total)}`;
+  document.getElementById('stat-net-formula').textContent = `2${superscript(cfg.netBits)} = ${formatBig(totalNet)} réseaux`;
+  document.getElementById('stat-host-formula').textContent = `2${superscript(cfg.hostBits)} = ${formatBig(total)} adresses`;
+  document.getElementById('stat-mask').textContent = cfg.mask;
+  document.getElementById('stat-mask-dec').textContent = cfg.maskDec;
+
+  // Private zones
+  renderPrivZones(cls);
+  document.getElementById('priv-shortcut-ip').textContent = ipStr(cfg.privRanges[0].start);
+
+  // Binary grid
+  buildBinaryGrid(cfg.netBits);
+
+  // Set default IP
+  STATE.ip = [...cfg.defaultIP];
+  STATE.prevBits = null;
+  setSliderRange();
+  renderAll();
+}
+
+/* ═══════════════════════════════════════════
+   SLIDER RANGE
+═══════════════════════════════════════════ */
+function setSliderRange() {
+  const cfg = CLASS_CFG[STATE.cls];
+  const slider = document.getElementById('ip-slider');
+  slider.min = cfg.startInt;
+  slider.max = cfg.endInt;
+  slider.value = ipToInt(STATE.ip);
+  updateSliderFill();
+}
+
+function updateSliderFill() {
+  const cfg = CLASS_CFG[STATE.cls];
+  const slider = document.getElementById('ip-slider');
+  const v = parseInt(slider.value);
+  const pct = (v - cfg.startInt) / (cfg.endInt - cfg.startInt) * 100;
+  slider.style.setProperty('--fill', pct.toFixed(2) + '%');
+
+  // Range bar cursor
+  document.getElementById('rb-cursor').style.left = pct.toFixed(2) + '%';
+  document.getElementById('slider-pos-val').textContent = ipStr(intToIp(v));
+  colorIPs();
+}
+
+/* ═══════════════════════════════════════════
+   BUILD BINARY GRID
+═══════════════════════════════════════════ */
+function buildBinaryGrid(netBits) {
+  const grid = document.getElementById('binary-grid');
+  grid.innerHTML = '';
+
+  for (let oct = 0; oct < 4; oct++) {
+    // Dot separator
+    if (oct > 0) {
+      const dot = document.createElement('div');
+      dot.className = 'octet-dot';
+      dot.textContent = '.';
+      grid.appendChild(dot);
+    }
+
+    const group = document.createElement('div');
+    group.className = 'octet-group';
+
+    // Decimal value
+    const dec = document.createElement('div');
+    dec.className = 'octet-dec';
+    dec.id = `dec-${oct}`;
+    dec.textContent = '0';
+    group.appendChild(dec);
+
+    // Bits
+    const bitsRow = document.createElement('div');
+    bitsRow.className = 'octet-bits';
+
+    for (let b = 0; b < 8; b++) {
+      const globalBit = oct * 8 + b;
+      const bit = document.createElement('div');
+      bit.id = `bit-${globalBit}`;
+
+      // Bits fixes de classe :
+      // A  → bit 0 = 0
+      // B  → bit 0 = 1, bit 1 = 0
+      // C  → bit 0 = 1, bit 1 = 1, bit 2 = 0
+      const fixedBits = {
+        A: [{pos:0, val:0}],
+        B: [{pos:0, val:1}, {pos:1, val:0}],
+        C: [{pos:0, val:1}, {pos:1, val:1}, {pos:2, val:0}],
+      };
+      const fixedDefs = fixedBits[STATE.cls];
+      const fixedCount = fixedDefs.length;
+      // La frontière NET/HOST est après (fixedCount + netBits) bits
+      const boundary = fixedCount + netBits;
+
+      const fixed = fixedDefs.find(f => f.pos === globalBit);
+      if (fixed !== undefined) {
+        // Bit fixe de classe → rouge, quelle que soit sa valeur
+        bit.className = 'bit fixed-zero class-fixed';
+        bit.textContent = fixed.val;
+      } else if (globalBit < boundary) {
+        // Bit NET (hors bits fixes)
+        bit.className = 'bit net';
+        bit.textContent = '0';
+      } else {
+        // Bit HOST
+        bit.className = 'bit host';
+        bit.textContent = '0';
+      }
+
+      // Séparateur jaune à la frontière NET/HOST
+      if (globalBit === boundary) bit.classList.add('separator');
+
+      bitsRow.appendChild(bit);
+    }
+
+    group.appendChild(bitsRow);
+    grid.appendChild(group);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   RENDER ALL
+═══════════════════════════════════════════ */
+function renderAll() {
+  const ip = STATE.ip;
+  const cfg = CLASS_CFG[STATE.cls];
+  const ipInt = ipToInt(ip);
+
+  // IP display octets
+  for (let i = 0; i < 4; i++) {
+    document.getElementById(`o${i}`).textContent = ip[i];
+    document.getElementById(`dec-${i}`).textContent = ip[i];
+  }
+  // Couleurs NET / HOST sur l'IP (A:1 octet NET, B:2, C:3)
+  const nc = STATE.cls === 'A' ? 1 : STATE.cls === 'B' ? 2 : 3;
+  for (let i = 0; i < 4; i++) {
+    const k = i < nc ? 'o-net' : 'o-host';
+    ['o' + i, 'dec-' + i].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.classList.remove('o-net', 'o-host'); e.classList.add(k); }
+    });
+  }
+  document.querySelectorAll('#ip-display .sep').forEach((s, i) => {
+    s.classList.remove('s-net', 's-host');
+    s.classList.add(i + 1 < nc ? 's-net' : 's-host');
+  });
+
+  // Bits
+  const allBits = ip.flatMap(o => toBin8(o).split('').map(Number));
+  const prev = STATE.prevBits;
+
+  for (let i = 0; i < 32; i++) {
+    const el = document.getElementById(`bit-${i}`);
+    if (!el) continue;
+    const changed = prev && prev[i] !== allBits[i];
+    // Les bits fixes gardent leur valeur affichée (0 ou 1 selon la classe)
+    if (!el.classList.contains('class-fixed')) {
+      el.textContent = allBits[i];
+    }
+    if (changed && !el.classList.contains('class-fixed')) {
+      el.classList.remove('changed');
+      void el.offsetWidth;
+      el.classList.add('changed');
+    }
+  }
+  STATE.prevBits = allBits;
+
+  // Sync slider
+  const slider = document.getElementById('ip-slider');
+  slider.value = ipInt;
+  updateSliderFill();
+
+  // Sync private slider if IP is within private range
+  const privSlider = document.getElementById('priv-slider');
+  if (privSlider && ipInt >= parseInt(privSlider.min) && ipInt <= parseInt(privSlider.max)) {
+    if (document.activeElement !== privSlider) {
+      privSlider.value = ipInt;
+      updatePrivSliderFill();
+    }
+  }
+
+  // Input field
+  const inputEl = document.getElementById('ip-input');
+  if (document.activeElement !== inputEl) {
+    inputEl.value = ipStr(ip);
+    inputEl.classList.remove('invalid');
+  }
+
+  // Private check
+  const isPrivate = checkPrivate(ip, cfg);
+  const display = document.getElementById('ip-display');
+  const badge = document.getElementById('ip-type-badge');
+  const privInd = document.getElementById('priv-ind');
+
+  display.classList.toggle('is-private', isPrivate);
+
+  if (isPrivate) {
+    badge.className = 'ip-type-badge ip-type-private';
+    badge.textContent = '🔒 PRIVÉE';
+    privInd.classList.add('visible');
+  } else {
+    badge.className = 'ip-type-badge ip-type-public';
+    badge.textContent = '🌐 PUBLIQUE';
+    privInd.classList.remove('visible');
+  }
+
+  // Highlight private zones
+  updatePrivZoneHighlights(ip, cfg);
+  colorIPs();
+}
+
+/* ═══════════════════════════════════════════
+   PRIVATE LOGIC
+═══════════════════════════════════════════ */
+function checkPrivate(ip, cfg) {
+  const v = ipToInt(ip);
+  for (const r of cfg.privRanges) {
+    if (v >= ipToInt(r.start) && v <= ipToInt(r.end)) return true;
+  }
+  return false;
+}
+
+function renderPrivZones(cls) {
+  const cfg = CLASS_CFG[cls];
+  const container = document.getElementById('priv-zones');
+  container.innerHTML = '';
+
+  // Setup private slider using first private range
+  const firstPriv = cfg.privRanges[0];
+  const privSlider = document.getElementById('priv-slider');
+  const privStart = ipToInt(firstPriv.start);
+  const privEnd = ipToInt(firstPriv.end);
+  privSlider.min = privStart;
+  privSlider.max = privEnd;
+  privSlider.value = privStart;
+  document.getElementById('priv-slider-val').textContent = ipStr(firstPriv.start);
+  document.getElementById('priv-tick-start').textContent = ipStr(firstPriv.start);
+  document.getElementById('priv-tick-end').textContent = ipStr(firstPriv.end);
+  updatePrivSliderFill();
+
+  cfg.privRanges.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'priv-zone';
+    div.id = `priv-zone-${i}`;
+    div.innerHTML = `
+      <div class="pz-progress" id="pz-prog-${i}"></div>
+      <div class="pz-name">${r.name}</div>
+      <div style="display:flex;flex-direction:column;gap:.15rem;flex:1;">
+        <div class="pz-range">${r.label}</div>
+        <div class="pz-current" id="pz-cur-${i}" style="font-size:.65rem;color:var(--priv-col);font-weight:700;opacity:0;transition:opacity .3s;"></div>
+      </div>
+      <div class="pz-badge" id="pz-badge-${i}">Public</div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function updatePrivZoneHighlights(ip, cfg) {
+  const v = ipToInt(ip);
+  cfg.privRanges.forEach((r, i) => {
+    const zone = document.getElementById(`priv-zone-${i}`);
+    const badge = document.getElementById(`pz-badge-${i}`);
+    const prog = document.getElementById(`pz-prog-${i}`);
+    const curEl = document.getElementById(`pz-cur-${i}`);
+    if (!zone) return;
+
+    const sInt = ipToInt(r.start), eInt = ipToInt(r.end);
+    const inRange = v >= sInt && v <= eInt;
+    zone.classList.toggle('highlighted', inRange);
+
+    if (inRange) {
+      badge.textContent = '🔒 Privée';
+      const pct = ((v - sInt) / (eInt - sInt) * 100).toFixed(1);
+      prog.style.right = (100 - pct) + '%';
+      if (curEl) { curEl.textContent = '▶ ' + ipStr(ip); curEl.style.opacity = '1'; }
+    } else {
+      badge.textContent = 'Public';
+      prog.style.right = '100%';
+      if (curEl) { curEl.style.opacity = '0'; }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════
+   EVENTS
+═══════════════════════════════════════════ */
+function onSlider() {
+  if (!STATE.cls) return;
+  const v = parseInt(document.getElementById('ip-slider').value);
+  STATE.ip = intToIp(v);
+  updateSliderFill();
+  renderAll();
+}
+
+function onIPInput() {
+  if (!STATE.cls) return;
+  const raw = document.getElementById('ip-input').value.trim();
+  const parts = raw.split('.').map(p => parseInt(p));
+  const cfg = CLASS_CFG[STATE.cls];
+
+  if (parts.length === 4 && parts.every((p,i) => !isNaN(p) && p >= 0 && p <= 255)) {
+    const v = ipToInt(parts);
+    if (v >= cfg.startInt && v <= cfg.endInt) {
+      document.getElementById('ip-input').classList.remove('invalid');
+      STATE.ip = parts;
+      renderAll();
+    } else {
+      document.getElementById('ip-input').classList.add('invalid');
+    }
+  } else {
+    document.getElementById('ip-input').classList.add('invalid');
+  }
+}
+
+function onIPKeydown(e) {
+  if (e.key === 'ArrowUp') {
+    e.preventDefault(); nudgeIP(1);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault(); nudgeIP(-1);
+  }
+}
+
+function nudgeIP(delta) {
+  if (!STATE.cls) return;
+  const cfg = CLASS_CFG[STATE.cls];
+  const v = ipToInt(STATE.ip) + delta;
+  if (v >= cfg.startInt && v <= cfg.endInt) {
+    STATE.ip = intToIp(v);
+    renderAll();
+  }
+}
+
+function goToPrivate() {
+  if (!STATE.cls) return;
+  const firstPriv = CLASS_CFG[STATE.cls].privRanges[0];
+  STATE.ip = [...firstPriv.start];
+  renderAll();
+  // Sync private slider
+  document.getElementById('priv-slider').value = ipToInt(firstPriv.start);
+  updatePrivSliderFill();
+}
+
+function updatePrivSliderFill() {
+  const slider = document.getElementById('priv-slider');
+  const v = parseInt(slider.value);
+  const min = parseInt(slider.min);
+  const max = parseInt(slider.max);
+  const pct = ((v - min) / (max - min) * 100).toFixed(2);
+  slider.style.setProperty('--fill', pct + '%');
+  document.getElementById('priv-slider-val').textContent = ipStr(intToIp(v));
+  colorIPs();
+}
+
+function onPrivSlider() {
+  if (!STATE.cls) return;
+  const v = parseInt(document.getElementById('priv-slider').value);
+  STATE.ip = intToIp(v);
+  updatePrivSliderFill();
+  renderAll();
+}
+
+/* ═══════════════════════════════════════════
+   THEME
+═══════════════════════════════════════════ */
+function toggleTheme() {
+  const body = document.body;
+  const isLight = body.classList.toggle('light');
+  document.getElementById('theme-icon').textContent = isLight ? '🌙' : '☀️';
+  document.getElementById('theme-label').textContent = isLight ? 'Mode sombre' : 'Mode clair';
+}
+
+/* ═══════════════════════════════════════════
+   SECRET CODE — frappe "0000" n'importe où
+═══════════════════════════════════════════ */
+(function() {
+  const SECRET = 'ip';
+  let buffer = '';
+
+  document.addEventListener('keydown', function(e) {
+    buffer += e.key;
+    if (buffer.length > SECRET.length) {
+      buffer = buffer.slice(-SECRET.length);
+    }
+    if (buffer === SECRET) {
+      buffer = '';
+      showSecretPage();
+    }
+  });
+
+  function showSecretPage() {
+    const overlay = document.getElementById('secret-overlay');
+    overlay.classList.add('active');
+    // Reset l'animation du texte
+    const crawl = document.getElementById('sw-crawl');
+    crawl.style.animation = 'none';
+    void crawl.offsetWidth;
+    crawl.style.animation = '';
+    // Démarrer le son
+    if (window._startSecretAudio) window._startSecretAudio();
+  }
+
+  window.closeSecret = function() {
+    document.getElementById('secret-overlay').classList.remove('active');
+    if (window.stopSwMusic) window.stopSwMusic();
+  };
+})();
+</script>
+
+<!-- ══════════════════════════════════════════
+     PAGE SECRÈTE — STAR WARS CREDITS
+══════════════════════════════════════════ -->
+<div id="secret-overlay">
+  <button class="sw-close" onclick="playSaberClose(); closeSecret();">✕ Fermer</button>
+  <button class="sw-audio-btn" id="sw-audio-btn" onclick="toggleSwMusic()">🔇 Musique OFF</button>
+
+  <div class="sw-stars" id="sw-stars"></div>
+
+  <div class="sw-scene">
+    <div class="sw-intro-text" id="sw-intro">
+      <p>Il y a bien longtemps, dans une galaxy très très lointaine...</p>
+    </div>
+
+    <div class="sw-logo-wrap" id="sw-logo">
+      <div class="sw-logo">IP<span>VERSE</span></div>
+    </div>
+
+    <div class="sw-perspective">
+      <div class="sw-crawl" id="sw-crawl">
+
+        <div class="sw-title-block">
+          <p class="sw-episode">Épisode I</p>
+          <p class="sw-ep-title">L'ORIGINE DU CODE</p>
+        </div>
+
+        <p>
+          Dans les confins obscurs du réseau, une application
+          fut forgée pour éclairer les apprentis sur les mystères
+          de l'adressage IPv4 par classes.
+        </p>
+
+        <p>
+          Cette odyssée numérique, née de la curiosité et de la passion
+          pour les réseaux informatiques, fut rendue possible grâce à
+          une alliance de forces créatrices hors du commun.
+        </p>
+
+        <div class="sw-section-title">— Les Outils de la Force —</div>
+
+        <p>
+          <span class="sw-highlight">Claude (Anthropic)</span> fut convoqué
+          pour écrire chaque ligne de code HTML, CSS et JavaScript.
+          Son intelligence artificielle sculpta l'interface, les animations
+          et la logique binaire avec une précision redoutable.
+        </p>
+
+        <p>
+          <span class="sw-highlight">ChatGPT (OpenAI)</span> prit en charge
+          la rédaction des prompts stratégiques, guidant la conception
+          de l'application avec une vision claire et des instructions
+          précises comme un sabre laser.
+        </p>
+
+        <p>
+          <span class="sw-highlight">Visual Studio Code</span> servit
+          d'arène pour l'assemblage final — éditeur de code légendaire,
+          témoin silencieux de chaque commit et de chaque correction.
+        </p>
+
+        <div class="sw-section-title">— Le Maître Jedi —</div>
+
+        <p>
+          Derrière tout grand projet se trouve un grand artisan.
+          Cette application fut imaginée, dirigée et façonnée par
+          un seul être humain dont la volonté de partager le savoir
+          ne connaît aucune limite.
+        </p>
+
+        <div class="sw-creator">NATHAN BADUEL</div>
+
+        <p class="sw-creator-title">Créateur · Architecte du Réseau · Padawan du Code</p>
+
+        <p>
+          Que la Force du réseau soit avec toi.
+          Que tes masques soient toujours justes,
+          tes plages d'adresses bien calculées,
+          et tes paquets correctement routés.
+        </p>
+
+        <div class="sw-section-title">— Technologies Utilisées —</div>
+
+        <p>
+          Ce projet fut entièrement réalisé en
+          <span class="sw-highlight">HTML · CSS · JavaScript</span>
+          — trois disciplines fondamentales du côté lumineux du
+          développement web. Aucun framework. Aucune dépendance.
+          Juste du code pur, comme à l'ère ancienne.
+        </p>
+
+        <p>
+          Les polices <span class="sw-highlight">JetBrains Mono</span> et
+          <span class="sw-highlight">Syne</span> accompagnèrent chaque
+          caractère affiché, apportant élégance et lisibilité
+          à cet univers binaire.
+        </p>
+
+        <div class="sw-section-title">— Remerciements —</div>
+
+        <p>
+          À tous ceux qui cherchent à comprendre comment fonctionne
+          Internet, à ceux qui ont eu la curiosité de taper
+          <span class="sw-highlight">0000</span> pour découvrir
+          cette page cachée — vous êtes des êtres d'exception.
+        </p>
+
+        <p>
+          L'apprentissage des réseaux est un voyage sans fin.
+          Chaque classe IP, chaque masque de sous-réseau,
+          chaque adresse privée est une étoile dans un univers
+          infiniment vaste.
+        </p>
+
+        <p class="sw-final">
+          Que la paix et la connaissance règnent<br>
+          dans tous les sous-réseaux de la galaxie.
+        </p>
+
+        <div class="sw-end-logo">✦ FIN ✦</div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* ══════════ SECRET OVERLAY ══════════ */
+#secret-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', monospace;
+}
+#secret-overlay.active { display: block; }
+
+.sw-close {
+  position: absolute;
+  top: 1.2rem; right: 1.5rem;
+  z-index: 10000;
+  background: rgba(255,232,31,0.15);
+  border: 2px solid rgba(255,232,31,0.6);
+  color: #ffe81f;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .15em;
+  padding: .6rem 1.4rem;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all .2s;
+  text-shadow: 0 0 10px rgba(255,232,31,.5);
+}
+.sw-close:hover {
+  background: rgba(255,232,31,0.3);
+  box-shadow: 0 0 20px rgba(255,232,31,0.5);
+}
+
+/* ══════════ STARS ══════════ */
+.sw-stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ══════════ SCENE STRUCTURE ══════════ */
+.sw-scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ══════════ INTRO TEXT ══════════ */
+.sw-intro-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  animation: swIntroFade 5s ease forwards;
+}
+.sw-intro-text p {
+  color: #4fc3f7;
+  font-size: clamp(1.3rem, 3.5vw, 2.2rem);
+  letter-spacing: .08em;
+  text-align: center;
+  font-style: italic;
+  opacity: 0;
+  animation: swIntroText 5s ease forwards;
+  text-shadow:
+    0 0 20px rgba(79,195,247,.7),
+    2px 2px 0 #000,
+    3px 3px 0 #001a2e;
+}
+@keyframes swIntroText {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes swIntroFade {
+  0%,80% { pointer-events: auto; }
+  100%   { pointer-events: none; opacity: 0; }
+}
+
+/* ══════════ LOGO FLASH ══════════ */
+.sw-logo-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  pointer-events: none;
+  animation: swLogoAnim 3s 4.5s ease forwards;
+  opacity: 0;
+}
+.sw-logo {
+  font-family: sans-serif;
+  font-size: clamp(5rem, 18vw, 13rem);
+  font-weight: 900;
+  color: #ffe81f;
+  letter-spacing: -.02em;
+  text-shadow:
+    /* Contour noir épais 3D */
+    -4px -4px 0 #000,
+     4px -4px 0 #000,
+    -4px  4px 0 #000,
+     4px  4px 0 #000,
+    -6px -6px 0 #111,
+     6px -6px 0 #111,
+    -6px  6px 0 #111,
+     6px  6px 0 #111,
+    /* Profondeur 3D */
+    8px 8px 0 #332200,
+    10px 10px 0 #221800,
+    /* Glow */
+    0 0 50px rgba(255,232,31,.9),
+    0 0 100px rgba(255,232,31,.6),
+    0 0 200px rgba(255,232,31,.3);
+}
+.sw-logo span {
+  color: #fff;
+  text-shadow:
+    -4px -4px 0 #000,
+     4px -4px 0 #000,
+    -4px  4px 0 #000,
+     4px  4px 0 #000,
+    -6px -6px 0 #111,
+     6px -6px 0 #111,
+    -6px  6px 0 #111,
+     6px  6px 0 #111,
+    8px 8px 0 #222,
+    10px 10px 0 #111,
+    0 0 50px rgba(255,255,255,.7),
+    0 0 100px rgba(79,195,247,.4);
+}
+
+@keyframes swLogoAnim {
+  0%   { opacity: 0; transform: scale(1.8); }
+  25%  { opacity: 1; transform: scale(1); }
+  65%  { opacity: 1; transform: scale(.55); }
+  100% { opacity: 0; transform: scale(.1); }
+}
+
+/* ══════════ PERSPECTIVE CRAWL ══════════ */
+.sw-perspective {
+  position: absolute;
+  inset: 0;
+  perspective: 500px;
+  perspective-origin: 50% 88%;
+  overflow: hidden;
+}
+
+.sw-crawl {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: clamp(320px, 72vw, 900px);
+  color: #ffe81f;
+  text-align: center;
+  line-height: 2;
+  padding: 0 2rem 80vh;
+  transform: translateX(-50%) rotateX(25deg);
+  transform-origin: 50% 100%;
+  animation: swCrawl 65s 8.5s linear forwards;
+  opacity: 0;
+}
+
+@keyframes swCrawl {
+  0%   { opacity: 1; top: 100%; }
+  100% { opacity: 1; top: -420%; }
+}
+
+/* ══════════ TEXTE 3D AVEC CONTOUR ══════════ */
+.sw-crawl p {
+  font-size: clamp(1.4rem, 2.8vw, 2rem);
+  margin-bottom: 1.8em;
+  letter-spacing: .05em;
+  text-shadow:
+    /* Contour noir net */
+    -2px -2px 0 #000,
+     2px -2px 0 #000,
+    -2px  2px 0 #000,
+     2px  2px 0 #000,
+    /* Profondeur 3D */
+    4px  4px 0 #332200,
+    6px  6px 2px rgba(0,0,0,.8),
+    /* Glow subtil */
+    0 0 20px rgba(255,232,31,.25);
+}
+
+.sw-title-block {
+  margin: 0 auto 3rem;
+}
+
+.sw-episode {
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  letter-spacing: .4em;
+  text-transform: uppercase;
+  margin-bottom: .6rem;
+  opacity: .9;
+  text-shadow:
+    -2px -2px 0 #000,  2px -2px 0 #000,
+    -2px  2px 0 #000,   2px  2px 0 #000,
+    4px 4px 0 #332200;
+}
+
+.sw-ep-title {
+  font-family: sans-serif;
+  font-size: clamp(3rem, 6vw, 5rem);
+  font-weight: 900;
+  letter-spacing: .1em;
+  line-height: 1.15;
+  margin-bottom: 2.5rem;
+  color: #ffe81f;
+  text-shadow:
+    /* Contour noir épais */
+    -3px -3px 0 #000,  3px -3px 0 #000,
+    -3px  3px 0 #000,   3px  3px 0 #000,
+    -5px -5px 0 #111,  5px -5px 0 #111,
+    -5px  5px 0 #111,   5px  5px 0 #111,
+    /* Relief 3D */
+    6px  6px 0 #332200,
+    8px  8px 0 #221800,
+    10px 10px 4px rgba(0,0,0,.9),
+    /* Glow */
+    0 0 30px rgba(255,232,31,.4);
+}
+
+.sw-section-title {
+  font-family: sans-serif;
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: .25em;
+  color: #fff;
+  margin: 3rem 0 2rem;
+  text-transform: uppercase;
+  text-shadow:
+    -2px -2px 0 #000,  2px -2px 0 #000,
+    -2px  2px 0 #000,   2px  2px 0 #000,
+    4px 4px 0 #222,
+    6px 6px 2px rgba(0,0,0,.8),
+    0 0 25px rgba(255,255,255,.3);
+}
+
+.sw-highlight {
+  color: #fff;
+  font-weight: 800;
+  text-shadow:
+    -2px -2px 0 #000,  2px -2px 0 #000,
+    -2px  2px 0 #000,   2px  2px 0 #000,
+    3px 3px 0 #222,
+    0 0 15px rgba(255,255,255,.6);
+}
+
+.sw-creator {
+  font-family: sans-serif;
+  font-size: clamp(3rem, 8vw, 7rem);
+  font-weight: 900;
+  letter-spacing: .12em;
+  color: #fff;
+  text-shadow:
+    /* Contour noir épais */
+    -4px -4px 0 #000,  4px -4px 0 #000,
+    -4px  4px 0 #000,   4px  4px 0 #000,
+    -6px -6px 0 #111,  6px -6px 0 #111,
+    -6px  6px 0 #111,   6px  6px 0 #111,
+    /* Relief 3D profond */
+    7px  7px 0 #1a1a1a,
+    9px  9px 0 #111,
+    11px 11px 4px rgba(0,0,0,.9),
+    /* Glow */
+    0 0 40px rgba(255,255,255,.8),
+    0 0 80px rgba(79,195,247,.5);
+  margin: 1.5rem 0 .75rem;
+}
+
+.sw-creator-title {
+  font-size: clamp(1.3rem, 2.8vw, 2rem);
+  letter-spacing: .22em;
+  color: #4fc3f7;
+  margin-bottom: 2.5rem !important;
+  text-shadow:
+    -2px -2px 0 #000,  2px -2px 0 #000,
+    -2px  2px 0 #000,   2px  2px 0 #000,
+    3px 3px 0 #001a2e,
+    0 0 20px rgba(79,195,247,.5);
+}
+
+.sw-final {
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  font-style: italic;
+  color: #fff;
+  opacity: .9;
+  line-height: 2.2 !important;
+  text-shadow:
+    -2px -2px 0 #000,  2px -2px 0 #000,
+    -2px  2px 0 #000,   2px  2px 0 #000,
+    4px 4px 0 #222,
+    0 0 20px rgba(255,255,255,.2);
+}
+
+.sw-end-logo {
+  font-family: sans-serif;
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  font-weight: 900;
+  letter-spacing: .45em;
+  color: #ffe81f;
+  text-shadow:
+    -3px -3px 0 #000,  3px -3px 0 #000,
+    -3px  3px 0 #000,   3px  3px 0 #000,
+    5px 5px 0 #332200,
+    7px 7px 3px rgba(0,0,0,.8),
+    0 0 40px rgba(255,232,31,.6);
+  margin-top: 4rem;
+}
+
+/* ══════════ AUDIO CONTROLS ══════════ */
+.sw-audio-btn {
+  position: absolute;
+  top: 1.2rem; left: 1.5rem;
+  z-index: 10000;
+  background: rgba(255,232,31,0.15);
+  border: 2px solid rgba(255,232,31,0.6);
+  color: #ffe81f;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: .6rem 1.2rem;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all .2s;
+  text-shadow: 0 0 10px rgba(255,232,31,.5);
+}
+.sw-audio-btn:hover {
+  background: rgba(255,232,31,0.3);
+  box-shadow: 0 0 20px rgba(255,232,31,0.5);
+}
+</style>
+
+<script>
+/* ══════════ GENERATE STARS (TWINKLING) ══════════ */
+(function() {
+  const container = document.getElementById('sw-stars');
+  if (!container) return;
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+  container.appendChild(canvas);
+
+  let stars = [];
+
+  function initStars() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    stars = [];
+    for (let i = 0; i < 350; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.8 + 0.2,
+        alpha: Math.random(),
+        speed: Math.random() * 0.015 + 0.003,
+        dir: Math.random() > 0.5 ? 1 : -1,
+      });
+    }
+  }
+
+  function animStars() {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    stars.forEach(s => {
+      s.alpha += s.speed * s.dir;
+      if (s.alpha >= 1 || s.alpha <= 0.05) s.dir *= -1;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${s.alpha.toFixed(2)})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(animStars);
+  }
+
+  initStars();
+  animStars();
+  window.addEventListener('resize', initStars);
+})();
+</script>
+
+<script>
+/* ══════════ STAR WARS MUSIC + SFX via Web Audio API ══════════ */
+(function() {
+  let audioCtx = null;
+  let musicNodes = [];
+  let musicPlaying = false;
+  let musicScheduled = false;
+
+  function getCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  /* ── Bruitage : whoosh d'ouverture ── */
+  function playWhoosh() {
+    const ctx = getCtx();
+    const bufLen = ctx.sampleRate * 1.2;
+    const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) {
+      const t = i / ctx.sampleRate;
+      const env = Math.exp(-t * 3.5) * (1 - Math.exp(-t * 60));
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(800, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 1.2);
+    filter.Q.value = 2;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.2);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start();
+  }
+
+  /* ── Note helper ── */
+  function playNote(freq, startTime, duration, gain, type = 'sawtooth') {
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+
+    filter.type = 'lowpass';
+    filter.frequency.value = 2200;
+    filter.Q.value = 1;
+
+    gainNode.gain.setValueAtTime(0, startTime);
+    gainNode.gain.linearRampToValueAtTime(gain, startTime + 0.04);
+    gainNode.gain.setValueAtTime(gain, startTime + duration - 0.08);
+    gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
+
+    // Légère reverb simulée
+    const delay = ctx.createDelay(0.3);
+    delay.delayTime.value = 0.18;
+    const delayGain = ctx.createGain();
+    delayGain.gain.value = 0.18;
+
+    osc.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    gainNode.connect(delay);
+    delay.connect(delayGain);
+    delayGain.connect(ctx.destination);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration + 0.1);
+
+    musicNodes.push(osc);
+  }
+
+  /* ── Thème principal Star Wars (mélodie + harmonies) ── */
+  function scheduleSWTheme(startOffset) {
+    const ctx = getCtx();
+    const t0 = ctx.currentTime + startOffset;
+
+    // Fréquences (Do Majeur transposé)
+    const C4=261.63, D4=293.66, E4=329.63, F4=349.23,
+          G4=392.00, A4=440.00, B4=493.88,
+          C5=523.25, D5=587.33, E5=659.25, F5=698.46,
+          G5=783.99, A5=880.00,
+          G3=196.00, C3=130.81, F3=174.61;
+
+    // Mélodie principale — thème Star Wars simplifié
+    const melody = [
+      // Fanfare intro
+      [G4, 0,    0.35], [G4, 0.38, 0.35], [G4, 0.76, 0.35],
+      [C5, 1.14, 0.7],  [G5, 1.88, 0.55],
+      [F5, 2.5,  0.25], [E5, 2.78, 0.25], [D5, 3.06, 0.25], [C5, 3.34, 0.7],
+      [G5, 4.1,  0.55],
+      [F5, 4.7,  0.25], [E5, 4.98, 0.25], [D5, 5.26, 0.25], [C5, 5.54, 0.7],
+      [G5, 6.3,  0.55],
+      [F5, 6.9,  0.25], [E5, 7.18, 0.25], [F5, 7.46, 0.25], [D5, 7.74, 0.9],
+      // Deuxième phrase
+      [G4, 8.8,  0.35], [G4, 9.18, 0.35], [G4, 9.56, 0.35],
+      [C5, 9.94, 0.7],  [G5, 10.68, 0.55],
+      [F5, 11.28, 0.25],[E5, 11.56, 0.25],[D5, 11.84, 0.25],[C5, 12.12, 0.7],
+      [G5, 12.88, 0.55],
+      [F5, 13.48, 0.25],[E5, 13.76, 0.25],[D5, 14.04, 0.25],[C5, 14.32, 0.9],
+    ];
+
+    // Basse
+    const bass = [
+      [C3, 0, 1.0], [G3, 1.14, 0.7], [C3, 2.5, 0.9], [F3, 3.5, 1.0],
+      [C3, 4.6, 0.7], [G3, 5.6, 0.9], [C3, 6.5, 1.0], [F3, 7.5, 1.2],
+      [C3, 8.8, 1.0], [G3, 9.94, 0.7],[C3, 11.28, 0.9],[F3, 12.12, 1.0],
+      [C3, 13.48, 0.7],[G3, 14.04, 0.9],
+    ];
+
+    melody.forEach(([freq, time, dur]) => {
+      playNote(freq, t0 + time, dur, 0.22, 'sawtooth');
+    });
+
+    bass.forEach(([freq, time, dur]) => {
+      playNote(freq, t0 + time, dur, 0.14, 'sine');
+    });
+
+    // Boucle après 16s
+    const loopTimer = setTimeout(() => {
+      if (musicPlaying) scheduleSWTheme(0.1);
+    }, (startOffset + 16) * 1000 + 500);
+    musicNodes.push({ stop: () => clearTimeout(loopTimer) });
+  }
+
+  /* ── Démarrer / Arrêter la musique ── */
+  function startMusic() {
+    if (musicPlaying) return;
+    musicPlaying = true;
+    musicNodes = [];
+    playWhoosh();
+    scheduleSWTheme(1.0);
+    const btn = document.getElementById('sw-audio-btn');
+    if (btn) btn.textContent = '🔊 Musique ON';
+  }
+
+  function stopMusic() {
+    musicPlaying = false;
+    musicNodes.forEach(n => { try { n.stop(); } catch(e){} });
+    musicNodes = [];
+    const btn = document.getElementById('sw-audio-btn');
+    if (btn) btn.textContent = '🔇 Musique OFF';
+  }
+
+  window.toggleSwMusic = function() {
+    if (musicPlaying) stopMusic();
+    else startMusic();
+  };
+
+  window.stopSwMusic = stopMusic;
+
+  /* ── Bruitage : sabres laser à la fermeture ── */
+  window.playSaberClose = function() {
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(900, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.6);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.65);
+  };
+
+  /* ── Auto-démarrage quand la page secrète s'ouvre ── */
+  window._startSecretAudio = function() {
+    playWhoosh();
+    setTimeout(() => { if (!musicPlaying) { musicPlaying = true; scheduleSWTheme(0); } }, 800);
+    const btn = document.getElementById('sw-audio-btn');
+    if (btn) btn.textContent = '🔊 Musique ON';
+  };
+})();
+</script>
+</body>
+</html>
