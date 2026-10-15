@@ -8,3 +8,4 @@ oui a Quatre patte sur la chaise sous le bureaux
 Mdrrrr je préfère SARAH quand même mais elle est pas mal quand même 
 SARAH tu la demonte
 Bah ouais logique mdr toi tu vas démonter ça POTE ALORS hyn 
+pourquoi pas 
