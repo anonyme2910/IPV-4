@@ -134,6 +134,17 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-tools .mp-gear{display:inline-flex;align-items:center;justify-content:center;padding:.55rem .7rem}
 .mp-tools .mp-gear.on{border-color:#ffb020;color:#ffb020;background:rgba(255,176,32,.14)}
 .mp-frz{margin-left:.8rem;font-size:.7rem;font-weight:800;color:#050810;background:#ffb020;border-radius:999px;padding:.25rem .7rem;vertical-align:middle;letter-spacing:.04em;font-family:'JetBrains Mono',monospace}
+
+/* ───────── DÉFI FLASH ───────── */
+@keyframes mpFlashPop{0%{opacity:0;transform:scale(.6)}12%{opacity:1;transform:scale(1.08)}22%{transform:scale(1)}85%{opacity:1}100%{opacity:0;transform:scale(1)}}
+@keyframes mpFlashPulse{0%,100%{box-shadow:0 0 6px rgba(255,176,32,.4)}50%{box-shadow:0 0 22px rgba(255,176,32,.95)}}
+#mp-flashsplash{position:fixed;inset:0;z-index:450;display:flex;align-items:center;justify-content:center;pointer-events:none;background:rgba(5,8,16,.55)}
+#mp-flashsplash .fs-box{text-align:center;padding:1.6rem 2rem;max-width:90%;border:2px solid #ffb020;border-radius:20px;background:rgba(10,15,30,.96);box-shadow:0 0 60px rgba(255,176,32,.55);font-family:'JetBrains Mono',monospace;animation:mpFlashPop 4s ease forwards}
+#mp-flashsplash .fs-ic{font-size:3.4rem;line-height:1}
+#mp-flashsplash .fs-t{font-family:sans-serif;font-size:2rem;font-weight:900;color:#ffb020;letter-spacing:.06em;margin:.4rem 0}
+#mp-flashsplash .fs-s{font-size:.95rem;font-weight:700;line-height:1.6;color:#e8f0ff}
+#mp-flashbar{position:fixed;top:34px;left:50%;transform:translateX(-50%);z-index:56;max-width:92%;text-align:center;background:rgba(10,15,30,.95);border:1px solid #ffb020;color:#ffb020;font:700 .72rem 'JetBrains Mono',monospace;padding:.4rem .9rem;border-radius:999px;pointer-events:none;animation:mpFlashPulse 1.2s ease-in-out infinite}
+#mp-flashbar.win{border-color:#5ca03a;color:#a8e08a;animation:none}
 </style>
 </head>
 <body>
@@ -217,7 +228,7 @@ function mpNorm(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f
 function mpGenCode(){let c='';for(let i=0;i<5;i++)c+=MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];return c;}
 function mpClean(){
   try{clearInterval(mp.tick);}catch(e){}
-  mpConfirmClose();mpDlClose();mpGuestFreeze(false);mpSettingsClose();
+  mpConfirmClose();mpDlClose();mpGuestFreeze(false);mpSettingsClose();mpFlashClear();
   try{mp.conns.forEach(c=>c.close());}catch(e){}
   try{if(mp.hostConn)mp.hostConn.close();}catch(e){}
   try{if(mp.peer)mp.peer.destroy();}catch(e){}
@@ -332,6 +343,15 @@ function mpGuard(){
         if(lk){mpToast('Tu as déjà validé une réponse : impossible de changer de niveau.');return;}
       }
       return ol.apply(this,arguments);
+    };
+    const ov=w.validate;
+    w.validate=function(){
+      let before=true;try{before=!!w.eval('validated');}catch(e){}
+      const r=ov.apply(this,arguments);
+      try{
+        if(!before&&mp.role==='guest'&&mp.started&&mp.flash&&mp.flash.active&&!mp.flash.claimed&&w.eval('validated&&roundResult&&roundResult.allOk'))mpFlashClaim();
+      }catch(e){}
+      return r;
     };
     try{new w.MutationObserver(()=>mpMark(w)).observe(w.document.getElementById('app'),{childList:true,subtree:true});}catch(e){}
   }
@@ -479,7 +499,7 @@ function mpRenderRes(){
     return r1+(ex?r2:'');
   }).join(''):'<tr><td colspan="10">Aucun joueur pour le moment.</td></tr>';
   const head='<th>Joueur</th><th>État</th>'+MP_LEVELS.map(l=>'<th>'+l+' – note /20</th><th>'+l+' – temps</th>').join('')+'<th>Total sorties de page</th><th>Total temps hors page</th>';
-  const _html=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}${mp.frozen?'<span class="mp-frz">⏸ PARTIE GELÉE</span>':''}</div>
+  const _html=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}${mp.frozen?'<span class="mp-frz">⏸ PARTIE GELÉE</span>':''}${mp.flash&&mp.flash.active?'<span class="mp-frz" style="background:#ff4d8d;color:#fff">⚡ DÉFI FLASH EN COURS</span>':''}</div>
     <div class="mp-tools"><button class="mp-btn mp-gear${mp.frozen?' on':''}" title="Paramètres de la partie" onclick="mpSettings(event)">${MP_GEAR}</button><button class="mp-btn" onclick="mpResToggle()">${mpResFull?'⤡ Réduire':'⤢ Plein écran'}</button><button class="mp-btn" id="mp-copybtn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn" title="Choisir le format" onclick="mpDlMenu(event)">${mpDlFmt==='pdf'?'📕 PDF':'📗 Excel (.xlsx)'} ▾</button><button class="mp-btn mp-dlgo" onclick="mpDlRun()">⬇ Télécharger</button><button class="mp-btn main" onclick="mpResClose()">✕ Fermer</button></div></div>
     <div class="mp-txt">Mode surveillé : <b>${ex?'activé':'désactivé'}</b> · mise à jour en direct · une couleur par joueur · sous chaque note : nombre de sorties de page et temps hors page.</div>
     <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
@@ -808,7 +828,8 @@ function mpSettingsRender(){
   m.innerHTML='<div class="mp-title" style="font-size:1rem">⚙ Paramètres de la partie</div>'
     +'<div style="font-size:.78rem;font-weight:700;color:#cfe3f5">'+(mp.frozen?'⏸ La partie est actuellement gelée.':'▶ La partie est en cours.')+'</div>'
     +'<button class="mp-btn'+(mp.frozen?' main':'')+'" onclick="mpFreezeToggle()">'+(mp.frozen?'▶ Reprendre la partie':'⏸ Geler la partie')+'</button>'
-    +'<div style="font-size:.68rem;line-height:1.6;color:#8aabcc">Gèle les chronomètres et bloque l\'écran de tous les joueurs connectés, à tout moment. Idéal pour suspendre le jeu et donner une explication ou faire un point de cours. Quand tu reprends, tout repart exactement comme avant.</div>';
+    +'<div style="font-size:.68rem;line-height:1.6;color:#8aabcc">Gèle les chronomètres et bloque l\'écran de tous les joueurs connectés, à tout moment. Idéal pour suspendre le jeu et donner une explication ou faire un point de cours. Quand tu reprends, tout repart exactement comme avant.</div>'
+    +mpFlashSettingsHtml();
 }
 function mpSettings(ev){
   ev.stopPropagation();
@@ -828,6 +849,95 @@ function mpFreezeToggle(){
   mpSettingsRender();
   mpResLast='';mpRenderRes();
 }
+
+/* ----- DÉFI FLASH : le 1er joueur qui valide une IP entièrement juste gagne +2 pts (dans le Quiz uniquement) ----- */
+const MP_FLASH_PTS=2;
+function mpFlashSettingsHtml(){
+  const f=mp.flash,on=!!(f&&f.active);
+  let h='<div style="border-top:1px solid #243050"></div>'
+    +'<div class="mp-title" style="font-size:1rem">⚡ Défi Flash</div>';
+  if(on)h+='<div style="font-size:.78rem;font-weight:700;color:#ffb020">⚡ Défi en cours… en attente d\'un premier gagnant.</div>'
+    +'<button class="mp-btn" onclick="mpFlashCancel()">✖ Annuler le défi</button>';
+  else{
+    if(f&&f.winner)h+='<div style="font-size:.78rem;font-weight:700;color:#a8e08a">🏆 Dernier gagnant : '+mpEsc(f.winner)+' (+'+MP_FLASH_PTS+' pts)</div>';
+    h+='<button class="mp-btn main" onclick="mpFlashStart()"'+(mp.frozen?' disabled':'')+'>⚡ Lancer un Défi Flash</button>';
+    if(mp.frozen)h+='<div style="font-size:.68rem;color:#ff8a8a">Reprends la partie avant de lancer un défi.</div>';
+  }
+  h+='<div style="font-size:.68rem;line-height:1.6;color:#8aabcc">Affiche une annonce sur l\'écran de tous les joueurs : le premier qui valide une IP avec toutes les réponses justes gagne +'+MP_FLASH_PTS+' pts, directement dans son score du Quiz (même en mode surveillé).</div>';
+  return h;
+}
+function mpFlashStart(){
+  if(mp.role!=='host'||!mp.started||mp.frozen)return;
+  if(mp.flash&&mp.flash.active)return;
+  mp.flash={id:Date.now(),active:true,pts:MP_FLASH_PTS,winner:null};
+  mp.conns.forEach(c=>{try{c.send({t:'flash',id:mp.flash.id,pts:mp.flash.pts});}catch(e){}});
+  mpToast('⚡ Défi Flash lancé !');
+  mpSettingsRender();mpResLast='';mpRenderRes();
+}
+function mpFlashCancel(){
+  if(mp.role!=='host'||!mp.flash||!mp.flash.active)return;
+  mp.flash.active=false;
+  mp.conns.forEach(c=>{try{c.send({t:'flashend'});}catch(e){}});
+  mpSettingsRender();mpResLast='';mpRenderRes();
+}
+/* hôte : arbitre — le premier message valide gagne */
+function mpFlashOnClaim(conn,d){
+  const f=mp.flash;
+  if(mp.role!=='host'||!f||!f.active||d.id!==f.id)return;
+  f.active=false;f.winner=conn._name||'Joueur';
+  mp.conns.forEach(c=>{try{c.send({t:'flashwin',id:f.id,pid:conn.peer,name:f.winner,pts:f.pts});}catch(e){}});
+  mpToast('🏆 '+f.winner+' remporte le Défi Flash (+'+f.pts+' pts)');
+  mpSettingsRender();mpResLast='';mpRenderRes();
+}
+/* joueur */
+let mpFlashT1=null,mpFlashT2=null;
+function mpFlashClear(){
+  clearTimeout(mpFlashT1);clearTimeout(mpFlashT2);
+  ['mp-flashsplash','mp-flashbar'].forEach(i=>{const e=document.getElementById(i);if(e)e.remove();});
+}
+function mpFlashShow(d){
+  if(mp.role!=='guest'||!mp.started)return;
+  mpFlashClear();
+  mp.flash={id:d.id,active:true,pts:d.pts||MP_FLASH_PTS,claimed:false};
+  const sp=document.createElement('div');sp.id='mp-flashsplash';
+  sp.innerHTML='<div class="fs-box"><div class="fs-ic">⚡</div><div class="fs-t">DÉFI FLASH !</div><div class="fs-s">Prochaine IP : le premier à valider<br>avec <b style="color:#ffb020">toutes les réponses justes</b><br>gagne <b style="color:#ffb020">+'+mp.flash.pts+' pts</b> bonus !</div></div>';
+  document.body.appendChild(sp);
+  mpFlashT1=setTimeout(()=>{const e=document.getElementById('mp-flashsplash');if(e)e.remove();},4000);
+  const bar=document.createElement('div');bar.id='mp-flashbar';
+  bar.textContent='⚡ DÉFI FLASH · le 1er à valider tout juste gagne +'+mp.flash.pts+' pts';
+  document.body.appendChild(bar);
+}
+function mpFlashClaim(){
+  const f=mp.flash;
+  if(!f||!f.active||f.claimed||!mp.hostConn||!mp.hostConn.open)return;
+  f.claimed=true;
+  try{mp.hostConn.send({t:'flashclaim',id:f.id});}catch(e){}
+}
+function mpFlashWin(d){
+  if(mp.role!=='guest'||!mp.started)return;
+  const mine=!!(mp.peer&&d.pid===mp.peer.id);
+  mp.flash=null;
+  clearTimeout(mpFlashT1);clearTimeout(mpFlashT2);
+  const sp=document.getElementById('mp-flashsplash');if(sp)sp.remove();
+  let bar=document.getElementById('mp-flashbar');
+  if(!bar){bar=document.createElement('div');bar.id='mp-flashbar';document.body.appendChild(bar);}
+  bar.className='win';
+  bar.textContent=mine?'🏆 Bravo ! Tu remportes le Défi Flash : +'+d.pts+' pts':'🏆 '+d.name+' remporte le Défi Flash (+'+d.pts+' pts)';
+  mpFlashT2=setTimeout(()=>{const e=document.getElementById('mp-flashbar');if(e)e.remove();},6000);
+  if(mine)mpFlashApply(d.pts);
+}
+function mpFlashApply(pts){
+  try{
+    const w=document.getElementById('f-quiz').contentWindow;
+    w.eval('score=fmt(score+'+(+pts||0)+');if(score>=20&&!won){won=true;stopTimer();}render();');
+    mpToast('⚡ +'+pts+' pts ajoutés à ton score !');
+    mpTick(true);
+  }catch(e){}
+}
+function mpFlashEnd(){
+  mp.flash=null;mpFlashClear();
+}
+
 /* côté joueur : écran de pause + chronomètre gelé */
 let mpFzTimer=null,mpFzLast=0,mpFzInert=[];
 function mpFzShift(){
@@ -893,7 +1003,10 @@ function mpCreate(tries){
         const e=mpEntry(conn);e.name=conn._name;e.disc=false;
         if(mp.started){try{conn.send({t:'start',exam:!!mp.exam});}catch(x){}}
         if(mp.started&&mp.frozen){try{conn.send({t:'freeze',on:true});}catch(x){}}
+        if(mp.started&&mp.flash&&mp.flash.active){try{conn.send({t:'flash',id:mp.flash.id,pts:mp.flash.pts});}catch(x){}}
         mpBroadcastPlayers();mpRenderRes();
+      }else if(d.t==='flashclaim'){
+        mpFlashOnClaim(conn,d);
       }else if(d.t==='status'){
         const e=mpEntry(conn);
         Object.assign(e,{state:d.state,level:d.level,score:d.score,coups:d.coups,note:d.note,time:d.time,exits:d.exits,away:d.away,levels:d.levels||{}});
@@ -969,6 +1082,9 @@ function mpJoin(){
       else if(d.t==='start'){mpGuestStart(!!d.exam);}
       else if(d.t==='kick'){mpKicked();}
       else if(d.t==='freeze'){mpGuestFreeze(!!d.on);}
+      else if(d.t==='flash'){mpFlashShow(d);}
+      else if(d.t==='flashwin'){mpFlashWin(d);}
+      else if(d.t==='flashend'){mpFlashEnd();}
     });
     conn.on('close',()=>{
       if(mp.hostConn!==conn)return;
