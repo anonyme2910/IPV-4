@@ -3,3 +3,4 @@ TU t'est amuser avec Hellokytty
  mdr je sais de qui tu parle cheveux attacher 
  Mdr celle qui est en ROSES aujourd'hui là celle qui était au BUREAU 
 sous le bureaux mdr
+ANAL avec celle qui a là Veste ROSES Là qui est au BUREAU mdrrr 
