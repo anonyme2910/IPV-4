@@ -5,3 +5,4 @@ TU t'est amuser avec Hellokytty
 sous le bureaux mdr
 ANAL avec celle qui a là Veste ROSES Là qui est au BUREAU mdrrr 
 oui a Quatre patte sur la chaise sous le bureaux
+Mdrrrr je préfère SARAH quand même mais elle est pas mal quand même 
