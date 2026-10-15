@@ -109,10 +109,10 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-cell small{opacity:.8;font-weight:600;margin-left:.3rem}
 
 #mp-res.full{padding:0;background:#050810}
-#mp-res.full .mp-box{max-width:none;width:100%;height:100%;border-radius:0;border:0;box-shadow:none;overflow:auto;padding:1.2rem 1.8rem}
+#mp-res.full>.mp-box{max-width:none;width:100%;height:100%;border-radius:0;border:0;box-shadow:none;overflow:auto;padding:1.2rem 1.8rem}
 #mp-res.full .mp-tbl-wrap{flex:1}
-#mp-res.full .mp-title{font-size:1.9rem}
-#mp-res.full .mp-txt{font-size:.85rem}
+#mp-res.full #mp-resbox .mp-title{font-size:1.9rem}
+#mp-res.full #mp-resbox .mp-txt{font-size:.85rem}
 #mp-res.full .mp-tbl{font-size:1rem}
 #mp-res.full .mp-tbl th{padding:.8rem .9rem;font-size:.85rem}
 #mp-res.full .mp-tbl td{padding:.75rem .9rem}
@@ -127,7 +127,13 @@ html,body{height:100%;overflow:hidden;background:#050810;font-family:'JetBrains 
 .mp-tools .mp-split .mp-arrow{border-radius:0 12px 12px 0;border-left:1px solid #6b4a00;padding:.55rem .65rem}
 .mp-kick{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;margin-left:.6rem;padding:0;border:1px solid #ff6b6b;border-radius:8px;background:rgba(255,80,80,.14);color:#ff8a8a;cursor:pointer;vertical-align:middle}
 .mp-kick:hover{background:#ff5050;color:#fff}
+.mp-tools .mp-dlgo{border-color:#ffb020;color:#ffb020}
+.mp-tools .mp-dlgo:hover{background:#ffb020;color:#050810}
 .mp-player.has-kick{display:flex;align-items:center;justify-content:space-between}
+
+.mp-tools .mp-gear{display:inline-flex;align-items:center;justify-content:center;padding:.55rem .7rem}
+.mp-tools .mp-gear.on{border-color:#ffb020;color:#ffb020;background:rgba(255,176,32,.14)}
+.mp-frz{margin-left:.8rem;font-size:.7rem;font-weight:800;color:#050810;background:#ffb020;border-radius:999px;padding:.25rem .7rem;vertical-align:middle;letter-spacing:.04em;font-family:'JetBrains Mono',monospace}
 </style>
 </head>
 <body>
@@ -203,7 +209,7 @@ const MP_OPTS={debug:0,config:{iceServers:[
   {urls:'turn:freestun.net:3478',username:'free',credential:'free'},
   {urls:'turns:freestun.net:5349',username:'free',credential:'free'}
 ]}};
-let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false,kicked:{}};
+let mp={peer:null,role:null,code:'',name:'',conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false,kicked:{},frozen:false};
 
 function mpBox(h){document.getElementById('mp-box').innerHTML=h;}
 function mpEsc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -211,11 +217,11 @@ function mpNorm(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f
 function mpGenCode(){let c='';for(let i=0;i<5;i++)c+=MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];return c;}
 function mpClean(){
   try{clearInterval(mp.tick);}catch(e){}
-  mpConfirmClose();mpDlClose();
+  mpConfirmClose();mpDlClose();mpGuestFreeze(false);mpSettingsClose();
   try{mp.conns.forEach(c=>c.close());}catch(e){}
   try{if(mp.hostConn)mp.hostConn.close();}catch(e){}
   try{if(mp.peer)mp.peer.destroy();}catch(e){}
-  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false,kicked:{}};
+  mp={peer:null,role:null,code:'',name:mp.name,wanted:mp.wanted,conns:[],hostConn:null,players:[],results:{},exam:false,started:false,exits:0,away:0,hiddenAt:0,tick:null,done:{},lv:{},curLevel:null,hiddenLevel:null,state:'salon',lastSig:'',lastSend:0,forceSend:false,kicked:{},frozen:false};
   mpUi();
 }
 function mpOpen(){
@@ -231,6 +237,7 @@ function mpRunning(){
       <div class="mp-txt">Partie en cours — ${mp.conns.length} joueur(s) connecté(s). Mode surveillé : <b>${mp.exam?'activé':'désactivé'}</b>.</div>
       <button class="mp-btn main" onclick="mpHide();mpResOpen()">📊 Voir les résultats</button>
       <button class="mp-btn" onclick="mpClose()">⛔ Terminer la partie (déconnecte tout le monde)</button>
+      <button class="mp-btn" onclick="mpHide();openPage('quiz')">🎮 Rejoindre la partie</button>
       <button class="mp-btn" onclick="mpHide()">Fermer</button>`);
   }else{
     const locked=mpLocked();
@@ -387,7 +394,7 @@ function mpTick(force){
 document.addEventListener('visibilitychange',()=>{
   if(mp.role!=='guest'||!mp.started||!mp.exam)return;
   if(document.hidden){
-    if(mpLocked()){
+    if(!mp.frozen&&mpLocked()){
       mp.exits++;mp.hiddenAt=Date.now();mp.hiddenLevel=mp.curLevel;
       if(mp.curLevel){const x=mp.lv[mp.curLevel]||(mp.lv[mp.curLevel]={n:0,away:0});x.n++;}
       mpTick(true);
@@ -421,7 +428,7 @@ function mpResOpen(){
   mpResFs(true);
 }
 function mpResClose(){
-  mpConfirmClose();mpDlClose();
+  mpConfirmClose();mpDlClose();mpSettingsClose();
   mpResFs(false);
   document.getElementById('mp-res').classList.remove('show','full');
 }
@@ -472,8 +479,8 @@ function mpRenderRes(){
     return r1+(ex?r2:'');
   }).join(''):'<tr><td colspan="10">Aucun joueur pour le moment.</td></tr>';
   const head='<th>Joueur</th><th>État</th>'+MP_LEVELS.map(l=>'<th>'+l+' – note /20</th><th>'+l+' – temps</th>').join('')+'<th>Total sorties de page</th><th>Total temps hors page</th>';
-  const _html=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}</div>
-    <div class="mp-tools"><button class="mp-btn" onclick="mpResToggle()">${mpResFull?'⤡ Réduire':'⤢ Plein écran'}</button><button class="mp-btn" id="mp-copybtn" onclick="mpResCopy()">📋 Copier</button><div class="mp-split"><button class="mp-btn" onclick="mpResDownload()">⬇ Excel (.xlsx)</button><button class="mp-btn mp-arrow" title="Choisir le format" onclick="mpDlMenu(event)">▾</button></div><button class="mp-btn main" onclick="mpResClose()">✕ Fermer</button></div></div>
+  const _html=`<div class="mp-head"><div class="mp-title">📊 Résultats — partie ${mp.code}${mp.frozen?'<span class="mp-frz">⏸ PARTIE GELÉE</span>':''}</div>
+    <div class="mp-tools"><button class="mp-btn mp-gear${mp.frozen?' on':''}" title="Paramètres de la partie" onclick="mpSettings(event)">${MP_GEAR}</button><button class="mp-btn" onclick="mpResToggle()">${mpResFull?'⤡ Réduire':'⤢ Plein écran'}</button><button class="mp-btn" id="mp-copybtn" onclick="mpResCopy()">📋 Copier</button><button class="mp-btn" title="Choisir le format" onclick="mpDlMenu(event)">${mpDlFmt==='pdf'?'📕 PDF':'📗 Excel (.xlsx)'} ▾</button><button class="mp-btn mp-dlgo" onclick="mpDlRun()">⬇ Télécharger</button><button class="mp-btn main" onclick="mpResClose()">✕ Fermer</button></div></div>
     <div class="mp-txt">Mode surveillé : <b>${ex?'activé':'désactivé'}</b> · mise à jour en direct · une couleur par joueur · sous chaque note : nombre de sorties de page et temps hors page.</div>
     <div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   mpSetRes(_html);
@@ -615,13 +622,17 @@ function mpResDownload(){
 
 /* ----- menu de téléchargement (flèche ▾) ----- */
 function mpDlClose(){const m=document.getElementById('mp-dlmenu');if(m)m.remove();}
+let mpDlFmt='xlsx';
+function mpDlPick(f){mpDlFmt=f;mpDlClose();mpResLast='';mpRenderRes();}
+function mpDlRun(){if(mpDlFmt==='pdf')mpPdfDownload();else mpResDownload();}
 function mpDlMenu(ev){
   ev.stopPropagation();
   if(document.getElementById('mp-dlmenu')){mpDlClose();return;}
   const r=ev.currentTarget.getBoundingClientRect();
   const m=document.createElement('div');m.id='mp-dlmenu';
-  m.style.cssText='position:fixed;z-index:95;min-width:200px;background:#0a0f1e;border:1px solid #243050;border-radius:12px;padding:.35rem;box-shadow:0 12px 30px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:.25rem;top:'+(r.bottom+6)+'px;right:'+Math.max(8,window.innerWidth-r.right)+'px';
-  m.innerHTML='<button class="mp-btn" style="text-align:left" onclick="mpDlClose();mpResDownload()">📗 Excel (.xlsx)</button><button class="mp-btn" style="text-align:left" onclick="mpDlClose();mpPdfDownload()">📕 PDF</button>';
+  m.style.cssText='position:fixed;z-index:95;min-width:200px;background:#0a0f1e;border:1px solid #243050;border-radius:12px;padding:.35rem;box-shadow:0 12px 30px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:.25rem;top:'+(r.bottom+6)+'px;left:'+Math.max(8,Math.min(r.left,window.innerWidth-220))+'px';
+  const it=(f,l)=>'<button class="mp-btn" style="text-align:left'+(mpDlFmt===f?';border-color:#ffb020':'')+'" onclick="mpDlPick(\''+f+'\')">'+(mpDlFmt===f?'✓ ':'')+l+'</button>';
+  m.innerHTML=it('xlsx','📗 Excel (.xlsx)')+it('pdf','📕 PDF');
   document.getElementById('mp-res').appendChild(m);
   setTimeout(()=>document.addEventListener('click',mpDlClose,{once:true}),0);
 }
@@ -788,6 +799,67 @@ function mpKicked(){
   mpMenu('Tu as été expulsé de la partie par le créateur.');
 }
 
+
+/* ----- paramètres de la partie : geler / reprendre ----- */
+const MP_GEAR='<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+function mpSettingsClose(){const m=document.getElementById('mp-setmenu');if(m)m.remove();}
+function mpSettingsRender(){
+  const m=document.getElementById('mp-setmenu');if(!m)return;
+  m.innerHTML='<div class="mp-title" style="font-size:1rem">⚙ Paramètres de la partie</div>'
+    +'<div style="font-size:.78rem;font-weight:700;color:#cfe3f5">'+(mp.frozen?'⏸ La partie est actuellement gelée.':'▶ La partie est en cours.')+'</div>'
+    +'<button class="mp-btn'+(mp.frozen?' main':'')+'" onclick="mpFreezeToggle()">'+(mp.frozen?'▶ Reprendre la partie':'⏸ Geler la partie')+'</button>'
+    +'<div style="font-size:.68rem;line-height:1.6;color:#8aabcc">Gèle les chronomètres et bloque l\'écran de tous les joueurs connectés, à tout moment. Idéal pour suspendre le jeu et donner une explication ou faire un point de cours. Quand tu reprends, tout repart exactement comme avant.</div>';
+}
+function mpSettings(ev){
+  ev.stopPropagation();
+  if(document.getElementById('mp-setmenu')){mpSettingsClose();return;}
+  const r=ev.currentTarget.getBoundingClientRect();
+  const m=document.createElement('div');m.id='mp-setmenu';
+  m.style.cssText="position:fixed;z-index:95;width:min(340px,calc(100vw - 16px));display:flex;flex-direction:column;gap:.7rem;padding:1rem;background:#0a0f1e;border:1px solid #243050;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.6);font-family:'JetBrains Mono',monospace;top:"+(r.bottom+6)+'px;left:'+Math.max(8,Math.min(r.left,window.innerWidth-356))+'px';
+  m.onclick=e=>e.stopPropagation();
+  document.getElementById('mp-res').appendChild(m);
+  mpSettingsRender();
+  setTimeout(()=>document.addEventListener('click',mpSettingsClose,{once:true}),0);
+}
+function mpFreezeToggle(){
+  if(mp.role!=='host'||!mp.started)return;
+  mp.frozen=!mp.frozen;
+  mp.conns.forEach(c=>{try{c.send({t:'freeze',on:mp.frozen});}catch(e){}});
+  mpSettingsRender();
+  mpResLast='';mpRenderRes();
+}
+/* côté joueur : écran de pause + chronomètre gelé */
+let mpFzTimer=null,mpFzLast=0,mpFzInert=[];
+function mpFzShift(){
+  const now=Date.now(),dt=now-mpFzLast;mpFzLast=now;
+  if(dt<=0)return;
+  try{document.getElementById('f-quiz').contentWindow.eval('if(typeof timerRunning!=="undefined"&&timerRunning)startTime+='+dt);}catch(e){}
+}
+function mpGuestFreeze(on){
+  const old=document.getElementById('mp-freeze');
+  if(on){
+    if(mp.role!=='guest'||!mp.started||old)return;
+    mp.frozen=true;
+    const o=document.createElement('div');o.id='mp-freeze';
+    o.style.cssText="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;background:rgba(5,8,16,.95);color:#e8f0ff;font-family:'JetBrains Mono',monospace";
+    o.innerHTML='<div style="font-size:64px;line-height:1">⏸</div><div style="font-size:1.6rem;font-weight:900;color:#ffb020;letter-spacing:.04em">PARTIE EN PAUSE</div><div style="max-width:420px;font-size:.85rem;line-height:1.7;color:#8aabcc">Le créateur de la partie fait une explication.<br>Ton chronomètre est gelé : tu reprendras exactement là où tu t\'es arrêté.</div>';
+    document.body.appendChild(o);
+    mpFzInert=[];
+    Array.from(document.body.children).forEach(el=>{if(el===o||el.tagName==='SCRIPT')return;if(!el.inert){el.inert=true;mpFzInert.push(el);}});
+    try{if(document.activeElement)document.activeElement.blur();}catch(e){}
+    try{document.getElementById('f-quiz').contentWindow.document.activeElement.blur();}catch(e){}
+    mpFzLast=Date.now();
+    clearInterval(mpFzTimer);
+    mpFzTimer=setInterval(mpFzShift,200);
+  }else{
+    if(old)mpFzShift();
+    clearInterval(mpFzTimer);mpFzTimer=null;
+    if(old)old.remove();
+    mpFzInert.forEach(el=>{el.inert=false;});mpFzInert=[];
+    mp.frozen=false;
+  }
+}
+
 /* ----- CRÉER ----- */
 function mpCreate(tries){
   if(typeof Peer==='undefined'){mpErr("Connexion impossible : vérifie ta connexion internet.");return;}
@@ -820,6 +892,7 @@ function mpCreate(tries){
         if(mp.conns.indexOf(conn)<0)mp.conns.push(conn);
         const e=mpEntry(conn);e.name=conn._name;e.disc=false;
         if(mp.started){try{conn.send({t:'start',exam:!!mp.exam});}catch(x){}}
+        if(mp.started&&mp.frozen){try{conn.send({t:'freeze',on:true});}catch(x){}}
         mpBroadcastPlayers();mpRenderRes();
       }else if(d.t==='status'){
         const e=mpEntry(conn);
@@ -854,9 +927,8 @@ function mpCopy(){try{navigator.clipboard.writeText(mp.code);const e=document.ge
 function mpStart(){
   mp.started=true;
   mp.conns.forEach(c=>{mpEntry(c).state='menu';try{c.send({t:'start',exam:!!mp.exam});}catch(e){}});
-  document.getElementById('mp-modal').classList.remove('show');
   mpUi();
-  openPage('quiz');
+  mpRunning();
 }
 
 /* ----- REJOINDRE ----- */
@@ -896,6 +968,7 @@ function mpJoin(){
       if(d.t==='players'){mp.players=d.list||[];mpGuestLobby();}
       else if(d.t==='start'){mpGuestStart(!!d.exam);}
       else if(d.t==='kick'){mpKicked();}
+      else if(d.t==='freeze'){mpGuestFreeze(!!d.on);}
     });
     conn.on('close',()=>{
       if(mp.hostConn!==conn)return;
