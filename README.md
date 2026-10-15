@@ -10,3 +10,4 @@ SARAH tu la demonte
 Bah ouais logique mdr toi tu vas démonter ça POTE ALORS hyn 
 pourquoi pas 
 Mdrrrr Elle te l'as dit nannn ? SARAH ?
+OUI
