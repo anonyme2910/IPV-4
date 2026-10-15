@@ -9,3 +9,4 @@ Mdrrrr je préfère SARAH quand même mais elle est pas mal quand même
 SARAH tu la demonte
 Bah ouais logique mdr toi tu vas démonter ça POTE ALORS hyn 
 pourquoi pas 
+Mdrrrr Elle te l'as dit nannn ? 
